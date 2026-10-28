@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, RocketIcon } from "lucide-react";
 
 import {
   CREATOR_FEE,
@@ -23,6 +23,7 @@ import type { Draft, Field } from "@/lib/agent";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import MorphOrb from "@/components/ui/ai-thiking-orb-and-input";
 
 type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean };
@@ -55,14 +56,53 @@ function fillPrompt(text: string) {
   el.focus();
 }
 
+const frames = (n = 2) =>
+  new Promise<void>((r) => {
+    const step = (k: number) => (k ? requestAnimationFrame(() => step(k - 1)) : r());
+    step(n);
+  });
+
+/** Resolves once the orb reaches `phase` (or after `ms`). */
+function waitPhase(root: Element, phase: string, ms = 3000) {
+  return new Promise<void>((resolve) => {
+    if (root.getAttribute("data-phase") === phase) return resolve();
+    const done = () => (mo.disconnect(), clearTimeout(t), resolve());
+    const mo = new MutationObserver(() => root.getAttribute("data-phase") === phase && done());
+    const t = setTimeout(done, ms);
+    mo.observe(root, { attributes: true, attributeFilter: ["data-phase"] });
+  });
+}
+
+/** Mirrors the orb's data-phase (idle, think, answered, …) into React state. */
+function useOrbPhase() {
+  const [phase, setPhase] = useState("idle");
+  useEffect(() => {
+    const root = document.querySelector(".mo-root");
+    if (!root) return;
+    const mo = new MutationObserver(() => setPhase(root.getAttribute("data-phase") ?? "idle"));
+    mo.observe(root, { attributes: true, attributeFilter: ["data-phase"] });
+    return () => mo.disconnect();
+  }, []);
+  return phase;
+}
+
 export function AgentConsole() {
-  const { address, connect } = useWallet();
+  const { address, connect, confirmLaunch } = useWallet();
   const { publish } = useTokens();
+  const phase = useOrbPhase();
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [log, setLog] = useState<Turn[]>([]);
+  const [ready, setReady] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const draftRef = useRef<Draft | null>(null);
   const askingRef = useRef<Field | null>(null);
   const readyRef = useRef(false);
+
+  // readyRef is read inside the orb's async flow; `ready` drives the Launch buttons
+  const markReady = (v: boolean) => {
+    readyRef.current = v;
+    setReady(v);
+  };
 
   const render = (tok: Draft, status: string) => setBlueprint({ tok: { ...tok }, status });
 
@@ -75,17 +115,35 @@ export function AgentConsole() {
       return QUESTIONS[f];
     }
     askingRef.current = null;
-    readyRef.current = true;
+    markReady(true);
     render(draft, "awaiting confirmation");
-    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Say launch or deploy to go live, or edit any field.`;
+    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Press Launch to go live, or edit any field.`;
   };
 
   const deploy = async (): Promise<string> => {
     const tok = draftRef.current!;
     const wallet = address ?? (await connect());
-    if (!wallet) return "No wallet connected, so nothing was launched. Type launch to try again.";
+    if (!wallet) return "No wallet connected, so nothing was launched. Press Launch to try again.";
+
+    render(tok, "waiting for wallet confirmation");
+    const approved = await confirmLaunch({
+      title: `Launch ${tok.name} ($${tok.ticker})`,
+      lines: [
+        ["network", NETWORK],
+        ["supply", fmt(SUPPLY)],
+        ["tax", `${TAX}% buy & sell`],
+        ["creator fee", `${CREATOR_FEE}% → ${shortAddr(wallet)}`],
+        ["protocol fee", `${PROTOCOL_FEE}%`],
+        ...(tok.x ? [["x", "@" + tok.x] as [string, string]] : []),
+        ...(tok.website ? [["website", tok.website] as [string, string]] : []),
+      ],
+    });
+    if (!approved) {
+      render(tok, "rejected in wallet");
+      return "Launch cancelled in your wallet. Press Launch to try again.";
+    }
     draftRef.current = null;
-    readyRef.current = false;
+    markReady(false);
 
     const startedAt = performance.now();
     for (const s of [
@@ -122,7 +180,7 @@ export function AgentConsole() {
     if (!found && draft && isCancel(text)) {
       draftRef.current = null;
       askingRef.current = null;
-      readyRef.current = false;
+      markReady(false);
       setBlueprint(null);
       return "Understood, draft discarded. Tell me about the next token you’d like to create.";
     }
@@ -147,10 +205,10 @@ export function AgentConsole() {
       if (!Object.keys(a).length) return `That doesn’t look quite right. ${QUESTIONS[askingRef.current]}`;
       Object.assign(draft, a);
     } else {
-      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Say launch or deploy when you’re ready.";
+      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Press Launch when you’re ready.";
     }
 
-    readyRef.current = false;
+    markReady(false);
     return askNext();
   };
 
@@ -160,9 +218,58 @@ export function AgentConsole() {
     return answer;
   };
 
+  // Launch button: replays "launch" through the orb so the same flow runs
+  // (wallet picker if needed → wallet confirmation → deploy), with animation.
+  const launch = async () => {
+    const root = document.querySelector(".mo-root");
+    const form = document.querySelector<HTMLFormElement>(".mo-input");
+    if (!root || !form || launching || !readyRef.current) return;
+    setLaunching(true);
+    try {
+      if (root.getAttribute("data-phase") === "answered") {
+        document.querySelector<HTMLButtonElement>(".mo-reset")?.click();
+        await waitPhase(root, "idle");
+      }
+      if (root.getAttribute("data-phase") !== "idle") return;
+      fillPrompt("launch");
+      await frames();
+      form.requestSubmit();
+    } finally {
+      setLaunching(false);
+    }
+  };
+  const canLaunch = ready && !launching && (phase === "idle" || phase === "answered");
+
   return (
-    <div className="relative">
+    <div className="relative" data-launch-ready={ready && phase === "answered" ? "" : undefined}>
       <MorphOrb onSubmit={onSubmit} minThinkMs={1400} />
+
+      {/* Launch buttons live in a stage-sized layer so they line up with the orb
+          on every screen (below xl the side panels make this wrapper taller). */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-dvh">
+        {/* beside the orb's Reply button, under the summary card */}
+        {ready && phase === "answered" ? (
+          <Button
+            variant="signal"
+            onClick={launch}
+            disabled={!canLaunch}
+            className="pointer-events-auto absolute left-[calc(50%+6px)] top-[calc(46%+96px)] h-[35px] animate-in fade-in-0 duration-300"
+          >
+            <RocketIcon /> Launch
+          </Button>
+        ) : null}
+        {/* …and above the input pill once the user is back in the composer */}
+        {ready && phase === "idle" ? (
+          <Button
+            variant="signal"
+            onClick={launch}
+            disabled={!canLaunch}
+            className="pointer-events-auto absolute bottom-[140px] left-1/2 -translate-x-1/2 animate-in fade-in-0 slide-in-from-bottom-1 duration-300"
+          >
+            <RocketIcon /> Launch ${blueprint?.tok.ticker}
+          </Button>
+        ) : null}
+      </div>
 
       {/* compact title on small screens, where the panels stack below the stage */}
       <div className="pointer-events-none absolute inset-x-0 top-20 px-4 text-center sm:px-6 xl:hidden">
@@ -178,7 +285,7 @@ export function AgentConsole() {
         <IntroPanel />
         <div className="hidden xl:block" />
         <div className="pointer-events-auto grid content-start gap-4">
-          <BlueprintPanel bp={blueprint} wallet={address} />
+          <BlueprintPanel bp={blueprint} wallet={address} onLaunch={ready ? launch : undefined} canLaunch={canLaunch} />
           {log.length ? <SessionLog log={log} /> : null}
         </div>
       </div>
@@ -241,7 +348,17 @@ function PanelBar({ title }: { title: string }) {
   );
 }
 
-function BlueprintPanel({ bp, wallet }: { bp: Blueprint | null; wallet: string | null }) {
+function BlueprintPanel({
+  bp,
+  wallet,
+  onLaunch,
+  canLaunch,
+}: {
+  bp: Blueprint | null;
+  wallet: string | null;
+  onLaunch?: () => void;
+  canLaunch: boolean;
+}) {
   if (!bp) {
     return (
       <div className="border border-border bg-background/80 backdrop-blur-sm">
@@ -295,6 +412,11 @@ function BlueprintPanel({ bp, wallet }: { bp: Blueprint | null; wallet: string |
           {bp.live ? "● " : "[ draft ] "}
           {bp.status}
         </p>
+        {onLaunch && !bp.live ? (
+          <Button variant="signal" className="mt-3 w-full" onClick={onLaunch} disabled={!canLaunch}>
+            <RocketIcon /> Launch ${bp.tok.ticker}
+          </Button>
+        ) : null}
         {bp.live ? (
           <Link href="/explore" className="mt-3 flex items-center gap-1.5 text-xs text-foreground hover:text-signal">
             View in Explore <ArrowRightIcon className="size-3.5" />

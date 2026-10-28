@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { ArrowUpRightIcon, LoaderIcon, LockIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+
 import { randHex } from "@/lib/agent";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,13 @@ const WALLETS: WalletDef[] = [
 
 type Option = WalletDef & { detail: ProviderDetail | null; demo?: boolean };
 
+/** What the user is asked to approve in their wallet before a launch. */
+export type LaunchRequest = { title: string; lines: [string, string][] };
+type ConfirmState = LaunchRequest & { resolve: (ok: boolean) => void };
+
+const toHex = (s: string) =>
+  "0x" + Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, "0")).join("");
+
 type WalletCtx = {
   address: string | null;
   walletName: string | null;
@@ -54,6 +63,12 @@ type WalletCtx = {
   connect: () => Promise<string | null>;
   openPicker: () => void;
   disconnect: () => void;
+  /**
+   * Asks the connected wallet to approve a launch. A real wallet pops up its
+   * own signature request straight away (personal_sign, no gas); the demo
+   * wallet shows an in-app prompt instead. Resolves false when rejected.
+   */
+  confirmLaunch: (req: LaunchRequest) => Promise<boolean>;
 };
 
 const Ctx = createContext<WalletCtx | null>(null);
@@ -71,6 +86,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [announced, setAnnounced] = useState<ProviderDetail[]>([]);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const addressRef = useRef<string | null>(null);
   const providerRef = useRef<Eip1193Provider | null>(null);
   const resolverRef = useRef<((a: string | null) => void) | null>(null);
@@ -177,9 +193,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const confirmLaunch = useCallback(async (req: LaunchRequest) => {
+    const provider = providerRef.current;
+    const addr = addressRef.current;
+    if (provider && addr) {
+      const message = [req.title, ...req.lines.map(([k, v]) => `${k}: ${v}`), "", "Signing does not cost gas."].join("\n");
+      try {
+        await provider.request({ method: "personal_sign", params: [toHex(message), addr] });
+        return true;
+      } catch {
+        return false; // rejected (4001) or the wallet failed to sign
+      }
+    }
+    return new Promise<boolean>((resolve) => setConfirm({ ...req, resolve }));
+  }, []);
+
+  const settleConfirm = (ok: boolean) => {
+    confirm?.resolve(ok);
+    setConfirm(null);
+  };
+
   const value = useMemo(
-    () => ({ address, walletName, connect, openPicker, disconnect }),
-    [address, walletName, connect, openPicker, disconnect],
+    () => ({ address, walletName, connect, openPicker, disconnect, confirmLaunch }),
+    [address, walletName, connect, openPicker, disconnect, confirmLaunch],
   );
 
   const demo: Option = { id: "demo", name: "Demo wallet", demo: true, detail: null };
@@ -213,6 +249,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <LockIcon className="size-3.5" /> Zoza never asks for your private keys or seed phrase.
           </p>
+        </DialogContent>
+      </Dialog>
+
+      {/* demo wallet's stand-in for a wallet's signature prompt */}
+      <Dialog open={!!confirm} onOpenChange={(o) => !o && settleConfirm(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              <span className="text-signal">$</span> confirm --launch
+            </DialogTitle>
+            <DialogDescription>
+              {walletName ?? "Your wallet"} · {address ? address.slice(0, 6) + "…" + address.slice(-4) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {confirm ? (
+            <>
+              <div className="border border-border bg-card/50 p-4">
+                <p className="mb-3 font-semibold">{confirm.title}</p>
+                <dl className="space-y-2 text-xs">
+                  {confirm.lines.map(([k, v]) => (
+                    <div key={k} className="flex items-baseline gap-2">
+                      <dt className="shrink-0 text-muted-foreground">{k}</dt>
+                      <span aria-hidden className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-border" />
+                      <dd className="truncate text-right">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Demo wallet — confirming simulates the launch. No real transaction is sent.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={() => settleConfirm(false)}>
+                  Reject
+                </Button>
+                <Button variant="signal" onClick={() => settleConfirm(true)}>
+                  Confirm launch
+                </Button>
+              </div>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
     </Ctx.Provider>

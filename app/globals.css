@@ -638,3 +638,8 @@
   border: 1px solid var(--border);
   cursor: pointer;
 }
+
+/* agent page: make room for the Launch button beside the orb's Reply button */
+[data-launch-ready] .mo-reset {
+  translate: calc(-100% - 6px) 0;
+}
