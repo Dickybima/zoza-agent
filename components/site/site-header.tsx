@@ -7,7 +7,6 @@ import { CopyIcon, LogOutIcon, MenuIcon, RefreshCwIcon, WalletIcon, XIcon } from
 
 import { shortAddr } from "@/lib/agent";
 import { PAGES, isActive } from "@/lib/nav";
-import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,6 @@ import { ThemeToggle } from "@/components/site/theme-toggle";
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const { tokens } = useTokens();
   const pathname = usePathname();
 
   return (
@@ -49,9 +47,6 @@ export function SiteHeader() {
                 )}
               >
                 {l.label}
-                {l.href === "/explore" && tokens.length > 0 ? (
-                  <span className="ml-1.5 text-signal">[{tokens.length}]</span>
-                ) : null}
               </Link>
             );
           })}
@@ -89,7 +84,6 @@ export function SiteHeader() {
             >
               <span className={cn("text-xs", active ? "text-signal" : "text-muted-foreground")}>{active ? "›" : l.index}</span>
               {l.label}
-              {l.href === "/explore" && tokens.length > 0 ? <span className="text-signal">[{tokens.length}]</span> : null}
             </Link>
           );
         })}
