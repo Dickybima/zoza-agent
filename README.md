@@ -6,7 +6,7 @@ Website landing page untuk **Zoza** — AI agent pembuat token yang dibangun di 
 
 - Hero dengan animasi terminal agent
 - Fitur, cara kerja, info Robinhood Chain, roadmap, FAQ
-- **Demo agent interaktif**: ketik perintah bahasa natural (mis. `buat token Nusantara simbol NUSA supply 100 juta pajak 2%`) dan Zoza akan menyusun ringkasan token lalu mensimulasikan deploy.
+- **Demo agent interaktif**: cukup berikan nama, ticker, akun X, dan website (mis. `token Nusantara ticker NUSA x @nusantara web nusantara.io`). Pajak tetap 3% beli & jual, seluruhnya ke wallet pembuat token. Zoza menyusun ringkasan lalu mensimulasikan peluncuran.
 
 > Demo bersifat simulasi — tidak ada transaksi on-chain yang dikirim.
 

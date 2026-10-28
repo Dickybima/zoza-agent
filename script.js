@@ -35,11 +35,13 @@ connectBtn.addEventListener("click", connectWallet);
 
 // ---------- Hero terminal ----------
 const termLines = [
-  ['<span class="p">you ›</span> buat token Nusantara, simbol NUSA, supply 100 juta', 40],
+  ['<span class="p">you ›</span> token Nusantara ticker NUSA x @nusantara web nusantara.io', 40],
   ['<span class="k">zoza ›</span> memahami permintaan…', 18],
   ['  name    : Nusantara', 8],
-  ['  symbol  : NUSA', 8],
-  ['  supply  : 100.000.000', 8],
+  ['  ticker  : $NUSA', 8],
+  ['  x       : @nusantara', 8],
+  ['  website : nusantara.io', 8],
+  ['  tax     : 3% → wallet pembuat', 8],
   ['  network : Robinhood Chain', 8],
   ['<span class="k">zoza ›</span> menyusun smart contract…', 18],
   ['<span class="k">zoza ›</span> deploy ke Robinhood Chain…', 18],
@@ -92,9 +94,23 @@ document.querySelectorAll("[data-count]").forEach((el) => {
 });
 
 // ---------- Agent ----------
+// Kreator cukup mengisi nama, ticker, X, dan website.
+// Pajak tetap 3% dan seluruh fee mengalir ke wallet pembuat token.
+const TAX = 3;
+const SUPPLY = 1_000_000_000;
+const FIELDS = ["name", "ticker", "x", "website"];
+const QUESTIONS = {
+  name: "Apa <b>nama</b> token yang ingin kamu ciptakan?",
+  ticker: "Pilih <b>ticker</b>-nya (2–10 karakter), misalnya <code>NUSA</code>.",
+  x: "Tautkan akun <b>X</b> proyekmu — <code>@handle</code> atau <code>x.com/handle</code>. Ketik <code>lewati</code> bila belum ada.",
+  website: "Terakhir, alamat <b>website</b>-nya? Ketik <code>lewati</code> bila belum ada.",
+};
+
 const log = $("#chatLog");
 const preview = $("#preview");
 let draft = null;
+let asking = null;
+let ready = false;
 
 function addMsg(html, who = "bot") {
   const m = document.createElement("div");
@@ -112,57 +128,79 @@ async function botSay(html, delay = 700) {
   return t;
 }
 
-const MULT = { ribu: 1e3, rb: 1e3, k: 1e3, juta: 1e6, jt: 1e6, m: 1e6, million: 1e6, miliar: 1e9, milyar: 1e9, b: 1e9, billion: 1e9, triliun: 1e12, t: 1e12 };
+const SKIP = /^(lewati|skip|tidak ada|ga ada|gak ada|belum ada|-)$/i;
+const X_URL = /(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})\/?/i;
+const URL_RE = /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,]*)?)/i;
 
-function parseNumber(str) {
-  const m = str.match(/([\d.,]+)\s*(ribu|rb|juta|jt|miliar|milyar|triliun|million|billion|[kmbt])?\b/i);
-  if (!m) return null;
-  let raw = m[1];
-  // "1.000.000" atau "1,000,000" → ribuan; "1,5" atau "1.5" → desimal
-  if (/^\d{1,3}([.,]\d{3})+$/.test(raw)) raw = raw.replace(/[.,]/g, "");
-  else raw = raw.replace(",", ".");
-  const n = parseFloat(raw);
-  if (isNaN(n)) return null;
-  return Math.round(n * (m[2] ? MULT[m[2].toLowerCase()] : 1));
-}
+const cleanTicker = (v) => v.replace(/^\$/, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 10);
+const cleanX = (v) => {
+  const m = v.match(X_URL) || v.match(/@?([A-Za-z0-9_]{1,15})$/);
+  return m ? m[1] : null;
+};
+const cleanWeb = (v) => {
+  const m = v.match(URL_RE);
+  return m ? m[1].replace(/^https?:\/\//i, "").replace(/\/$/, "") : null;
+};
 
+// Ambil field dari kalimat bebas, mis.
+// "buat token Nusantara ticker NUSA x @nusa web nusa.io"
 function parsePrompt(text) {
-  const t = text.trim();
   const out = {};
+  let t = " " + text.trim() + " ";
 
-  const sym = t.match(/(?:simbol|symbol|ticker|\$)\s*:?\s*\$?([A-Za-z0-9]{2,10})/i);
-  if (sym) out.symbol = sym[1].toUpperCase();
+  const xm = t.match(new RegExp("(?:\\b(?:x|twitter)\\s*:?\\s*)?" + X_URL.source, "i")) || t.match(/\s(?:x|twitter)(?:\s*:\s*|\s+)@?([A-Za-z0-9_]{1,15})\b/i) || t.match(/\s@([A-Za-z0-9_]{1,15})\b/);
+  if (xm) {
+    out.x = xm[1];
+    t = t.replace(xm[0], " ");
+  }
+  const wm = t.match(/\b(?:website|web|situs|site)\s*:?\s*(\S+)/i) || t.match(URL_RE);
+  if (wm) {
+    const w = cleanWeb(wm[1]);
+    if (w) out.website = w;
+    t = t.replace(wm[0], " ");
+  }
+  const tm = t.match(/\b(?:ticker|simbol|symbol)\s*:?\s*\$?([A-Za-z0-9]{2,10})\b/i) || t.match(/\$([A-Za-z0-9]{2,10})\b/);
+  if (tm) {
+    out.ticker = cleanTicker(tm[1]);
+    t = t.replace(tm[0], " ");
+  }
+  const nm = t.match(/\b(?:bernama|nama|token)\s+["“]?([A-Za-z0-9][A-Za-z0-9 \-]{0,30}?)["”]?\s*(?=\s*(?:,|\.|$)|\s+(?:dan|dengan|ticker|simbol|symbol|supply|x|twitter|web|website|situs)\b)/i);
+  if (nm) out.name = nm[1].trim();
 
-  const sup = t.match(/(?:supply|suplai|jumlah|total)\s*:?\s*([\d.,]+\s*(?:ribu|rb|juta|jt|miliar|milyar|triliun|million|billion|[kmbt])?)/i);
-  if (sup) out.supply = parseNumber(sup[1]);
-
-  const tax = t.match(/(?:pajak|tax|fee)\s*:?\s*([\d.,]+)\s*%/i);
-  if (tax) out.tax = parseFloat(tax[1].replace(",", "."));
-
-  const burn = t.match(/burn\s*:?\s*([\d.,]+)\s*%/i);
-  if (burn) out.burn = parseFloat(burn[1].replace(",", "."));
-
-  // Nama: setelah "token"/"bernama"/"nama", berhenti di kata kunci berikutnya
-  const name = t.match(/(?:bernama|nama|token)\s+(?:komunitas\s+|bernama\s+)?["“]?([A-Za-z0-9][A-Za-z0-9 \-]{0,30}?)["”]?\s*(?=,|\.|$|\b(?:simbol|symbol|ticker|supply|suplai|jumlah|total|pajak|tax|fee|burn|dengan)\b)/i);
-  if (name) out.name = name[1].trim();
-
-  // Bila tidak ada simbol tapi nama ada dan diikuti kata kapital (mis. "ZetaCoin ZETA")
-  if (out.name && !out.symbol) {
+  // "ZetaCoin ZETA" → nama ZetaCoin, ticker ZETA
+  if (out.name && !out.ticker) {
     const parts = out.name.split(/\s+/);
     const last = parts[parts.length - 1];
     if (parts.length > 1 && /^[A-Z0-9]{2,10}$/.test(last)) {
-      out.symbol = last;
+      out.ticker = last;
       out.name = parts.slice(0, -1).join(" ");
     }
   }
-  // Nama huruf kapital semua (mis. "GARUDA") dipakai sebagai simbol juga
-  if (out.name && !out.symbol && /^[A-Z0-9]{2,10}$/.test(out.name)) {
-    out.symbol = out.name;
-    out.name = out.name.charAt(0) + out.name.slice(1).toLowerCase();
-  }
-  if (out.name && !out.symbol) out.symbol = out.name.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase();
   return out;
 }
+
+// Jawaban langsung atas pertanyaan agent
+function parseAnswer(field, text) {
+  const v = text.trim();
+  if ((field === "x" || field === "website") && SKIP.test(v)) return { [field]: null };
+  if (field === "name") return v.length <= 32 ? { name: v.replace(/^["“]|["”]$/g, "") } : {};
+  if (field === "ticker") {
+    const tk = cleanTicker(v);
+    return tk.length >= 2 ? { ticker: tk } : {};
+  }
+  if (field === "x") {
+    const x = cleanX(v);
+    return x ? { x } : {};
+  }
+  if (field === "website") {
+    const w = cleanWeb(v);
+    return w ? { website: w } : {};
+  }
+  return {};
+}
+
+const nextMissing = () => FIELDS.find((f) => !(f in draft));
+const shortAddr = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 
 function colorFor(s) {
   let h = 0;
@@ -171,82 +209,113 @@ function colorFor(s) {
 }
 
 function renderPreview(tok, status = "Draft — menunggu konfirmasi", live = false) {
+  const name = tok.name || "Token baru";
+  const ticker = tok.ticker || "—";
+  const pending = (f) => (f in tok ? tok[f] || "—" : "…");
   const rows = [
-    ["Nama", tok.name],
-    ["Simbol", tok.symbol],
-    ["Total supply", fmt(tok.supply)],
-    ["Decimals", "18"],
-    ["Pajak transaksi", (tok.tax ?? 0) + "%"],
-    ["Burn per transaksi", (tok.burn ?? 0) + "%"],
+    ["Nama", tok.name || "…"],
+    ["Ticker", tok.ticker ? "$" + tok.ticker : "…"],
+    ["X", "x" in tok ? (tok.x ? "@" + tok.x : "—") : "…"],
+    ["Website", pending("website")],
+    ["Pajak beli & jual", TAX + "%"],
+    ["Penerima fee", wallet ? shortAddr(wallet) : "Wallet pembuat"],
+    ["Total supply", fmt(SUPPLY)],
     ["Jaringan", "Robinhood Chain"],
   ];
   if (tok.address) rows.push(["Alamat kontrak", tok.address.slice(0, 10) + "…" + tok.address.slice(-6)]);
   preview.innerHTML = `
     <div class="token-head">
-      <div class="token-logo" style="background:${colorFor(tok.symbol)}">${escapeHtml(tok.symbol.slice(0, 2))}</div>
-      <div><h3>${escapeHtml(tok.name)}</h3><small>$${escapeHtml(tok.symbol)}</small></div>
+      <div class="token-logo" style="background:${colorFor(ticker + name)}">${escapeHtml((tok.ticker || name).slice(0, 2).toUpperCase())}</div>
+      <div><h3>${escapeHtml(name)}</h3><small>${tok.ticker ? "$" + escapeHtml(ticker) : "ticker belum diisi"}</small></div>
     </div>
     <dl class="kv">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHtml(String(v))}</dd></div>`).join("")}</dl>
     <div class="status ${live ? "live" : ""}">${status}</div>`;
 }
 
+async function askNext() {
+  const f = nextMissing();
+  if (f) {
+    asking = f;
+    renderPreview(draft, "Draft — melengkapi detail");
+    return botSay(QUESTIONS[f]);
+  }
+  asking = null;
+  ready = true;
+  renderPreview(draft);
+  const recipient = wallet ? `<code>${shortAddr(wallet)}</code>` : "wallet yang kamu gunakan untuk meluncurkan";
+  const m = await botSay(
+    `Cetak biru tokenmu siap:<br>
+     • Nama: <b>${escapeHtml(draft.name)}</b><br>
+     • Ticker: <b>$${escapeHtml(draft.ticker)}</b><br>
+     • X: <b>${draft.x ? "@" + escapeHtml(draft.x) : "—"}</b><br>
+     • Website: <b>${draft.website ? escapeHtml(draft.website) : "—"}</b><br>
+     • Pajak: <b>${TAX}%</b> setiap beli & jual, seluruhnya mengalir ke ${recipient}<br>
+     Luncurkan sekarang? Kamu masih bisa mengubah detail, mis. <code>ticker ABC</code>.
+     <div class="actions"><button class="btn btn-primary" data-act="deploy">Luncurkan</button><button class="btn btn-ghost" data-act="cancel">Batal</button></div>`,
+    900
+  );
+  m.querySelector('[data-act="deploy"]').onclick = () => handle("Luncurkan");
+  m.querySelector('[data-act="cancel"]').onclick = () => handle("Batal");
+}
+
 async function handle(text) {
   addMsg(escapeHtml(text), "user");
-  const lower = text.toLowerCase();
+  const lower = text.trim().toLowerCase();
 
-  if (draft && /^(ya|iya|ok|oke|yes|deploy|lanjut|gas)\b/.test(lower)) return deploy();
-  if (draft && /^(batal|tidak|no|cancel)\b/.test(lower)) {
+  if (draft && /^(batal|cancel)\b/.test(lower)) {
     draft = null;
-    return botSay("Oke, draft dibatalkan. Ceritakan token lain yang ingin kamu buat 🙂");
+    asking = null;
+    ready = false;
+    return botSay("Baik, draft dibatalkan. Ceritakan token lain yang ingin kamu ciptakan.");
+  }
+  if (/^(ya|iya|ok|oke|yes|deploy|luncurkan|lanjut|gas)$/.test(lower)) {
+    if (ready) return deploy();
+    if (asking) return botSay("Sebentar, detailnya belum lengkap. " + QUESTIONS[asking]);
   }
 
   const p = parsePrompt(text);
-  // Nama baru = token baru; selain itu perbarui draft yang ada
-  if (p.name) draft = p;
-  else if (draft) Object.assign(draft, Object.fromEntries(Object.entries(p).filter(([, v]) => v != null)));
-  else if (p.symbol) draft = p;
+  const found = Object.keys(p).length > 0;
 
   if (!draft) {
+    if (!found) {
+      draft = {};
+      Object.assign(draft, parseAnswer("name", text));
+      if (!draft.name) {
+        draft = null;
+        return botSay(QUESTIONS.name);
+      }
+    } else draft = p;
+  } else if (p.name && ready && /\btoken\b/i.test(text)) {
+    draft = p; // "token ..." setelah ringkasan = token baru; "nama ..." = ubah nama
+  } else if (found) {
+    Object.assign(draft, p);
+  } else if (asking) {
+    const a = parseAnswer(asking, text);
+    if (!Object.keys(a).length) return botSay("Sepertinya formatnya belum tepat. " + QUESTIONS[asking]);
+    Object.assign(draft, a);
+  } else {
     return botSay(
-      "Aku belum menangkap detail tokennya. Coba sebutkan <b>nama</b>, <b>simbol</b>, dan <b>supply</b>, misalnya:<br><code>buat token Nusantara simbol NUSA supply 100 juta</code>"
+      "Untuk mengubah detail, gunakan mis. <code>nama Garuda</code>, <code>ticker GRD</code>, <code>x @garuda</code>, atau <code>web garuda.io</code>. Ketik <code>luncurkan</code> bila sudah sesuai."
     );
   }
-  if (!draft.supply) {
-    renderPreview({ ...draft, supply: 0 }, "Draft — supply belum diisi");
-    return botSay(`Siap, token <b>${escapeHtml(draft.name || draft.symbol)}</b> ($${escapeHtml(draft.symbol)}). Berapa total supply yang kamu inginkan?`);
-  }
-  if (!draft.name) draft.name = draft.symbol;
-  if ((draft.tax ?? 0) > 25) {
-    draft.tax = 25;
-    await botSay("⚠️ Pajak di atas 25% berisiko dianggap scam oleh trader, jadi aku batasi ke 25%.");
-  }
 
-  renderPreview(draft);
-  const m = await botSay(
-    `Ini ringkasan tokenmu di Robinhood Chain:<br>
-     • Nama: <b>${escapeHtml(draft.name)}</b><br>
-     • Simbol: <b>$${escapeHtml(draft.symbol)}</b><br>
-     • Supply: <b>${fmt(draft.supply)}</b><br>
-     • Pajak: <b>${draft.tax ?? 0}%</b> · Burn: <b>${draft.burn ?? 0}%</b><br>
-     Lanjut deploy? Kamu juga bisa mengubah parameter, mis. <code>pajak 1%</code>.
-     <div class="actions"><button class="btn btn-primary" data-act="deploy">Deploy</button><button class="btn btn-ghost" data-act="cancel">Batal</button></div>`,
-    900
-  );
-  m.querySelector('[data-act="deploy"]').onclick = () => handle("Deploy");
-  m.querySelector('[data-act="cancel"]').onclick = () => handle("Batal");
+  ready = false;
+  return askNext();
 }
 
 async function deploy() {
   const tok = draft;
   draft = null;
+  ready = false;
   if (!wallet) {
-    await botSay("Menghubungkan wallet terlebih dahulu…", 500);
+    await botSay("Menautkan wallet terlebih dahulu…", 500);
     await connectWallet();
-    if (!wallet) return botSay("Wallet tidak terhubung. Coba lagi ya.");
+    if (!wallet) return botSay("Wallet belum tertaut. Silakan coba kembali.");
   }
   const steps = [
-    "🧠 Menyusun smart contract dari template teraudit…",
-    "🔍 Menjalankan pengecekan keamanan…",
+    "🧠 Menyusun smart contract dari arsitektur teraudit…",
+    `💸 Mengarahkan pajak ${TAX}% ke wallet pembuat ${shortAddr(wallet)}…`,
+    "🔗 Menyematkan tautan X dan website ke metadata token…",
     "✍️ Menunggu tanda tangan transaksi…",
     "🚀 Mengirim transaksi ke Robinhood Chain…",
   ];
@@ -258,9 +327,10 @@ async function deploy() {
   const tx = "0x" + randHex(64);
   renderPreview(tok, "● LIVE di Robinhood Chain (demo)", true);
   await botSay(
-    `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.symbol)}) berhasil diluncurkan!<br>
+    `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.ticker)}) resmi hidup!<br>
      Kontrak: <code>${tok.address}</code><br>
      Tx: <code>${tx.slice(0, 18)}…</code><br>
+     Pajak ${TAX}% dari setiap transaksi kini mengalir ke <code>${shortAddr(wallet)}</code>.<br>
      <small class="muted">*Ini simulasi — alamat & hash di atas bukan transaksi nyata.</small>`,
     900
   );
@@ -277,4 +347,4 @@ $("#chips").addEventListener("click", (e) => {
   if (e.target.tagName === "BUTTON") handle(e.target.textContent);
 });
 
-addMsg("Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Robinhood Chain</b>. Token seperti apa yang ingin kamu ciptakan hari ini?");
+addMsg(`Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Robinhood Chain</b>. Cukup berikan <b>nama</b>, <b>ticker</b>, akun <b>X</b>, dan <b>website</b>; pajak ${TAX}% setiap transaksi akan mengalir langsung ke wallet-mu.`);
