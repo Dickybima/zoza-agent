@@ -1,10 +1,12 @@
 // Shared Robinhood Chain plumbing for launches and trading: a read client that
 // races several RPC sources, wallet network switching, timeouts, and turning
 // wallet / RPC failures into readable messages.
-import { BaseError, UserRejectedRequestError, createPublicClient, custom, toHex } from "viem";
+import { BaseError, InsufficientFundsError, UserRejectedRequestError, createPublicClient, custom, toHex } from "viem";
 import type { EIP1193Provider } from "viem";
 
+import { shortAddr } from "@/lib/agent";
 import { robinhoodChain } from "@/lib/chain";
+import { fmtEth } from "@/lib/format";
 
 export class ChainError extends Error {
   constructor(
@@ -130,11 +132,42 @@ export const ensureChain = (provider: EIP1193Provider) => withTimeout(switchToRo
 
 export const NO_RPC = "Robinhood Chain did not respond. Check your connection and try again.";
 
+export const isInsufficientFunds = (err: unknown) =>
+  (err instanceof BaseError && !!err.walk((e) => e instanceof InsufficientFundsError)) ||
+  /insufficient funds|exceeds the balance/i.test(String((err as Error)?.message ?? ""));
+
+/** Readable "top up your wallet" error with the amounts involved. */
+export const notEnoughEth = (need: bigint, have: bigint, account: string) =>
+  new ChainError(
+    `Not enough ETH on Robinhood Chain: this needs ${fmtEth(need)} ETH plus gas, and ${shortAddr(account)} holds ${fmtEth(have)} ETH. ` +
+      "Send or bridge ETH to this wallet on Robinhood Chain (chain ID 4663), then try again.",
+  );
+
+/**
+ * Simulates a payable call. Arbitrum-based nodes (Robinhood Chain is an
+ * Arbitrum Orbit chain) price an eth_call without a gas limit at the RPC's
+ * gas cap, so a wallet that can easily afford the real transaction may be
+ * refused as "insufficient funds". Retry once with a realistic gas limit and
+ * hand the wallet a request without one, so it estimates gas itself.
+ */
+export async function simulateFunded<R extends { request: object }>(run: (gas?: bigint) => Promise<R>, gasLimit: bigint): Promise<R> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isInsufficientFunds(err)) throw err;
+    const res = await run(gasLimit);
+    return { ...res, request: { ...res.request, gas: undefined } };
+  }
+}
+
 export function toChainError(err: unknown): ChainError {
   if (err instanceof ChainError) return err;
   if (err instanceof BaseError) {
     if (err.walk((e) => e instanceof UserRejectedRequestError)) {
       return new ChainError("Transaction rejected in your wallet.", true);
+    }
+    if (isInsufficientFunds(err)) {
+      return new ChainError("Not enough ETH on Robinhood Chain to cover this transaction plus gas. Top up this wallet on Robinhood Chain (chain ID 4663), then try again.");
     }
     if (/unknown RPC error|HTTP request failed|took too long/i.test(err.shortMessage)) {
       return new ChainError("Couldn’t reach Robinhood Chain from your browser or your wallet. Check your connection, then try again.");

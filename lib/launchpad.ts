@@ -7,7 +7,7 @@ import { createWalletClient, custom, decodeEventLog, getAddress, parseAbi, toHex
 import type { Address, EIP1193Provider, Hash } from "viem";
 
 import { robinhoodChain } from "@/lib/chain";
-import { ChainError, NO_RPC, ensureChain, readClient, toChainError, withTimeout } from "@/lib/rpc";
+import { ChainError, NO_RPC, ensureChain, isInsufficientFunds, notEnoughEth, readClient, simulateFunded, toChainError, withTimeout } from "@/lib/rpc";
 
 export const LAUNCH_FACTORY: Address = "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e";
 
@@ -47,6 +47,9 @@ export type LaunchResult = {
 };
 
 export { ChainError as LaunchError } from "@/lib/rpc";
+// deploys the token and its bonding curve; generous, only used to price a simulation
+const LAUNCH_GAS_LIMIT = BigInt(12_000_000);
+
 const randomSalt = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
 
 /**
@@ -129,19 +132,35 @@ export async function launchToken(
       salt: randomSalt(),
     };
 
+    // the launch fee alone must be covered before anything is sent
+    const balance = await withTimeout(publicClient.getBalance({ address: account }), 30_000, NO_RPC);
+    if (balance <= launchFee) throw notEnoughEth(launchFee, balance, account);
+
     // simulate first so a revert surfaces as a readable error, not a failed tx
     onStatus("checking the launch");
-    const { request } = await withTimeout(
-      publicClient.simulateContract({
-        ...factory,
-        functionName: "launchToken",
-        args: [params, configId, zeroAddress],
-        value: launchFee,
-        account,
-      }),
-      45_000,
-      NO_RPC,
-    );
+    let request;
+    try {
+      ({ request } = await withTimeout(
+        simulateFunded(
+          (gas) =>
+            publicClient.simulateContract({
+              ...factory,
+              functionName: "launchToken",
+              args: [params, configId, zeroAddress],
+              value: launchFee,
+              account,
+              gas,
+            }),
+          LAUNCH_GAS_LIMIT,
+        ),
+        45_000,
+        NO_RPC,
+      ));
+    } catch (err) {
+      // still short once gas is priced realistically: the wallet really can't cover it
+      if (isInsufficientFunds(err)) throw notEnoughEth(launchFee, balance, account);
+      throw err;
+    }
 
     onStatus("confirm the launch in your wallet");
     const hash = await walletClient.writeContract(request);

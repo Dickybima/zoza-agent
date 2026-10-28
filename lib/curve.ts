@@ -8,7 +8,7 @@ import type { Address, EIP1193Provider, Hash } from "viem";
 
 import { robinhoodChain } from "@/lib/chain";
 import { LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
-import { ChainError, NO_RPC, ensureChain, readClient, toChainError, withTimeout } from "@/lib/rpc";
+import { ChainError, NO_RPC, ensureChain, isInsufficientFunds, notEnoughEth, readClient, simulateFunded, toChainError, withTimeout } from "@/lib/rpc";
 
 export const curveAbi = parseAbi([
   "function getReserves() view returns (uint256 quoteReserve_, uint256 tokenReserve_)",
@@ -219,6 +219,9 @@ export async function findLaunchBlock(client: Client, token: Address, head: bigi
 
 export type TradeResult = { hash: Hash };
 
+// a curve trade plus a possible auto-graduation; only used to price a simulation
+const TRADE_GAS_LIMIT = BigInt(3_000_000);
+
 /**
  * Buys with `ethIn` wei, or sells `tokensIn`, through the connected wallet:
  * switch to Robinhood Chain, approve the curve for a sell if needed, simulate,
@@ -259,18 +262,31 @@ export async function trade(
     onStatus("checking the trade");
     let hash: Hash;
     if (order.kind === "buy") {
-      const { request } = await withTimeout(
-        client.simulateContract({
-          address: curve,
-          abi: curveAbi,
-          functionName: "buy",
-          args: [order.ethIn, order.minTokens, account],
-          value: order.ethIn,
-          account,
-        }),
-        45_000,
-        NO_RPC,
-      );
+      const balance = await withTimeout(client.getBalance({ address: account }), 30_000, NO_RPC);
+      if (balance <= order.ethIn) throw notEnoughEth(order.ethIn, balance, account);
+      let request;
+      try {
+        ({ request } = await withTimeout(
+          simulateFunded(
+            (gas) =>
+              client.simulateContract({
+                address: curve,
+                abi: curveAbi,
+                functionName: "buy",
+                args: [order.ethIn, order.minTokens, account],
+                value: order.ethIn,
+                account,
+                gas,
+              }),
+            TRADE_GAS_LIMIT,
+          ),
+          45_000,
+          NO_RPC,
+        ));
+      } catch (err) {
+        if (isInsufficientFunds(err)) throw notEnoughEth(order.ethIn, balance, account);
+        throw err;
+      }
       onStatus("confirm the trade in your wallet");
       hash = await walletClient.writeContract(request);
     } else {
