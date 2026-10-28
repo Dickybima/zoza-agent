@@ -10,7 +10,9 @@ import {
   createWalletClient,
   custom,
   decodeEventLog,
+  fallback,
   getAddress,
+  http,
   parseAbi,
   toHex,
   zeroAddress,
@@ -63,29 +65,51 @@ export class LaunchError extends Error {
 }
 
 const CHAIN_HEX = toHex(robinhoodChain.id);
+const RPC_URL = robinhoodChain.rpcUrls.default.http[0];
+
+/** Rejects with `message` if `promise` has not settled within `ms`. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new LaunchError(message)), ms);
+    }),
+  ]);
+}
+
+const WRONG_NETWORK =
+  "Your wallet is not on Robinhood Chain. Switch it to Robinhood Chain (chain ID 4663) — or use a wallet that supports custom networks, such as MetaMask or Rabby — then press Launch again.";
 
 /** Switches the wallet to Robinhood Chain, adding the network if it is unknown. */
 async function ensureChain(provider: EIP1193Provider) {
-  const current = await provider.request({ method: "eth_chainId" });
-  if (Number(current) === robinhoodChain.id) return;
+  const onChain = async () => Number(await provider.request({ method: "eth_chainId" })) === robinhoodChain.id;
+  if (await onChain()) return;
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
   } catch (err) {
     const code = (err as { code?: number }).code;
     if (code === 4001) throw new LaunchError("Network switch was rejected in your wallet.", true);
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [
-        {
-          chainId: CHAIN_HEX,
-          chainName: robinhoodChain.name,
-          nativeCurrency: robinhoodChain.nativeCurrency,
-          rpcUrls: [...robinhoodChain.rpcUrls.default.http],
-          blockExplorerUrls: [robinhoodChain.blockExplorers.default.url],
-        },
-      ],
-    });
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: CHAIN_HEX,
+            chainName: robinhoodChain.name,
+            nativeCurrency: robinhoodChain.nativeCurrency,
+            rpcUrls: [RPC_URL],
+            blockExplorerUrls: [robinhoodChain.blockExplorers.default.url],
+          },
+        ],
+      });
+    } catch (addErr) {
+      if ((addErr as { code?: number }).code === 4001) throw new LaunchError("Adding Robinhood Chain was rejected in your wallet.", true);
+      throw new LaunchError(WRONG_NETWORK);
+    }
   }
+  // some wallets resolve the switch without actually changing networks
+  if (!(await onChain())) throw new LaunchError(WRONG_NETWORK);
 }
 
 const randomSalt = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
@@ -117,20 +141,32 @@ export async function launchToken(
     // wallets may report lowercase or non-checksummed addresses
     const account = getAddress(wallet.toLowerCase());
     onStatus("switching wallet to Robinhood Chain");
-    await ensureChain(provider);
+    // the switch may wait on a wallet prompt, so allow time for the user
+    await withTimeout(ensureChain(provider), 90_000, WRONG_NETWORK);
 
-    const transport = custom(provider);
-    const publicClient = createPublicClient({ chain: robinhoodChain, transport });
-    const walletClient = createWalletClient({ chain: robinhoodChain, transport, account });
+    // Reads go straight to Robinhood Chain's public RPC; if the browser cannot
+    // reach it, they fall back to the wallet's own RPC. Only the launch
+    // transaction itself needs the wallet.
+    const readTransport = fallback([
+      http(RPC_URL, { timeout: 15_000, retryCount: 1 }),
+      custom(provider, { retryCount: 0 }),
+    ]);
+    const publicClient = createPublicClient({ chain: robinhoodChain, transport: readTransport });
+    const walletClient = createWalletClient({ chain: robinhoodChain, transport: custom(provider), account });
     const factory = { address: LAUNCH_FACTORY, abi: launchFactoryAbi } as const;
+    const NO_RPC = "Robinhood Chain did not respond. Check your connection and press Launch to try again.";
 
     onStatus("reading launch terms");
-    const [allowed, launchFee, maxCreatorTaxBps, configCount] = await Promise.all([
-      publicClient.readContract({ ...factory, functionName: "canLaunch", args: [account] }),
-      publicClient.readContract({ ...factory, functionName: "launchFee" }),
-      publicClient.readContract({ ...factory, functionName: "maxCreatorTaxBps" }),
-      publicClient.readContract({ ...factory, functionName: "launchConfigCount" }),
-    ]);
+    const [allowed, launchFee, maxCreatorTaxBps, configCount] = await withTimeout(
+      Promise.all([
+        publicClient.readContract({ ...factory, functionName: "canLaunch", args: [account] }),
+        publicClient.readContract({ ...factory, functionName: "launchFee" }),
+        publicClient.readContract({ ...factory, functionName: "maxCreatorTaxBps" }),
+        publicClient.readContract({ ...factory, functionName: "launchConfigCount" }),
+      ]),
+      45_000,
+      NO_RPC,
+    );
     if (!allowed) throw new LaunchError("Launching is currently limited to whitelisted creators on this launchpad.");
     if (BigInt(input.creatorTaxBps) > maxCreatorTaxBps) {
       throw new LaunchError(`The launchpad caps the creator tax at ${Number(maxCreatorTaxBps) / 100}%.`);
@@ -140,7 +176,11 @@ export async function launchToken(
     let configId: bigint | null = null;
     let baseFeeBps = 0;
     for (let id = BigInt(0); id < configCount && configId === null; id += BigInt(1)) {
-      const config = await publicClient.readContract({ ...factory, functionName: "getLaunchConfig", args: [id] });
+      const config = await withTimeout(
+        publicClient.readContract({ ...factory, functionName: "getLaunchConfig", args: [id] }),
+        30_000,
+        NO_RPC,
+      );
       if (config.enabled) {
         configId = id;
         baseFeeBps = Number(config.curveFeeBps);
@@ -148,11 +188,11 @@ export async function launchToken(
     }
     if (configId === null) throw new LaunchError("No launch configuration is currently enabled.");
     // pin the quoted terms so an owner update cannot reprice this launch mid-flight
-    const expectedEconomics = await publicClient.readContract({
-      ...factory,
-      functionName: "previewLaunchEconomics",
-      args: [configId, zeroAddress],
-    });
+    const expectedEconomics = await withTimeout(
+      publicClient.readContract({ ...factory, functionName: "previewLaunchEconomics", args: [configId, zeroAddress] }),
+      30_000,
+      NO_RPC,
+    );
 
     const params = {
       name: input.name,
@@ -174,19 +214,24 @@ export async function launchToken(
     };
 
     // simulate first so a revert surfaces as a readable error, not a failed tx
-    const { request } = await publicClient.simulateContract({
-      ...factory,
-      functionName: "launchToken",
-      args: [params, configId, zeroAddress],
-      value: launchFee,
-      account,
-    });
+    onStatus("checking the launch");
+    const { request } = await withTimeout(
+      publicClient.simulateContract({
+        ...factory,
+        functionName: "launchToken",
+        args: [params, configId, zeroAddress],
+        value: launchFee,
+        account,
+      }),
+      45_000,
+      NO_RPC,
+    );
 
     onStatus("confirm the launch in your wallet");
     const hash = await walletClient.writeContract(request);
 
     onStatus("waiting for confirmation on Robinhood Chain");
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
     if (receipt.status !== "success") throw new LaunchError("The launch transaction reverted.");
 
     for (const log of receipt.logs) {

@@ -143,7 +143,7 @@ export function AgentConsole() {
       render(tok, e.rejected ? "rejected in wallet" : "launch failed");
       return e.rejected
         ? "Launch cancelled in your wallet. Press Launch to try again."
-        : `Launch failed: ${e.message} Press Launch to try again.`;
+        : `Launch failed: ${e.message}${/again\.?$/i.test(e.message) ? "" : " Press Launch to try again."}`;
     }
 
     draftRef.current = null;
