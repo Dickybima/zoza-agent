@@ -20,7 +20,7 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, roadmap, faq
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
