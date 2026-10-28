@@ -70,13 +70,12 @@ function renderWalletList() {
     if (!used.has(d.info.uuid)) walletOptions.push({ id: d.info.uuid, name: d.info.name, detail: d, color: "#2a2a40", letter: d.info.name[0] });
   }
   walletOptions.sort((a, b) => !!b.detail - !!a.detail);
-  walletOptions.push({ id: "demo", name: "Demo wallet", demo: true, color: "linear-gradient(135deg,#7c5cff,#00e0b8)", letter: "Z" });
+  walletOptions.push({ id: "demo", name: "Demo wallet", demo: true, color: "linear-gradient(135deg,#7c5cff,#00e0b8)", icon: "assets/logo.svg" });
 
   walletList.innerHTML = walletOptions
     .map((w, i) => {
-      const icon = w.detail?.info.icon && /^data:image\//.test(w.detail.info.icon)
-        ? `<img src="${escapeHtml(w.detail.info.icon)}" alt="" />`
-        : escapeHtml(w.letter);
+      const src = w.icon || (w.detail?.info.icon && /^data:image\//.test(w.detail.info.icon) ? w.detail.info.icon : null);
+      const icon = src ? `<img src="${escapeHtml(src)}" alt="" />` : escapeHtml(w.letter);
       const tag = w.soon ? '<span class="wallet-tag">Soon</span>'
         : w.demo ? '<span class="wallet-tag">No install</span>'
         : w.detail ? '<span class="wallet-tag ok">Detected</span>'
