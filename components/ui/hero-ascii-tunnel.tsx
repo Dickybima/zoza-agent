@@ -45,12 +45,15 @@ export interface VanishRunProps {
   children?: ReactNode;
   /** extra classes merged onto the rendered root element */
   className?: string;
+  /** steer the vanishing point (and children) toward the cursor */
+  followPointer?: boolean;
 }
 
 export function VanishRun({
   cellSize = 13,
   children,
   className = "",
+  followPointer = true,
 }: VanishRunProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -334,8 +337,10 @@ export function VanishRun({
 
     window.addEventListener("resize", onResize);
     if (!reduced) {
-      root.addEventListener("pointermove", onPointerMove);
-      root.addEventListener("pointerleave", onPointerLeave);
+      if (followPointer) {
+        root.addEventListener("pointermove", onPointerMove);
+        root.addEventListener("pointerleave", onPointerLeave);
+      }
     }
     document.addEventListener("visibilitychange", onVis);
 
@@ -350,7 +355,7 @@ export function VanishRun({
       root.removeEventListener("pointerleave", onPointerLeave);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [cellSize]);
+  }, [cellSize, followPointer]);
 
   return (
     <div

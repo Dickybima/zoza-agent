@@ -10,7 +10,7 @@ export function Cta() {
     <Section bordered>
       <div className="overflow-hidden border border-border">
         {/* same moving tunnel as the hero, framed to a card */}
-        <VanishRun className="h-[26rem] min-h-0! text-foreground sm:h-[30rem]">
+        <VanishRun followPointer={false} className="h-[26rem] min-h-0! text-foreground sm:h-[30rem]">
           <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
             <span className="text-signal">&gt;_</span> ready when you are
           </p>
