@@ -41,7 +41,7 @@ const termLines = [
   ['  ticker  : $NUSA', 8],
   ['  x       : @nusantara', 8],
   ['  website : nusantara.io', 8],
-  ['  tax     : 3% → wallet pembuat', 8],
+  ['  tax     : 3% (2% kreator · 1% protokol)', 8],
   ['  network : Robinhood Chain', 8],
   ['<span class="k">zoza ›</span> menyusun smart contract…', 18],
   ['<span class="k">zoza ›</span> deploy ke Robinhood Chain…', 18],
@@ -95,8 +95,10 @@ document.querySelectorAll("[data-count]").forEach((el) => {
 
 // ---------- Agent ----------
 // Kreator cukup mengisi nama, ticker, X, dan website.
-// Pajak tetap 3% dan seluruh fee mengalir ke wallet pembuat token.
-const TAX = 3;
+// Pajak tetap 3%: 2% ke wallet pembuat token, 1% biaya protokol.
+const CREATOR_FEE = 2;
+const PROTOCOL_FEE = 1;
+const TAX = CREATOR_FEE + PROTOCOL_FEE;
 const SUPPLY = 1_000_000_000;
 const FIELDS = ["name", "ticker", "x", "website"];
 const QUESTIONS = {
@@ -218,7 +220,8 @@ function renderPreview(tok, status = "Draft — menunggu konfirmasi", live = fal
     ["X", "x" in tok ? (tok.x ? "@" + tok.x : "—") : "…"],
     ["Website", pending("website")],
     ["Pajak beli & jual", TAX + "%"],
-    ["Penerima fee", wallet ? shortAddr(wallet) : "Wallet pembuat"],
+    [`Fee kreator (${CREATOR_FEE}%)`, wallet ? shortAddr(wallet) : "Wallet pembuat"],
+    [`Biaya protokol (${PROTOCOL_FEE}%)`, "Protokol"],
     ["Total supply", fmt(SUPPLY)],
     ["Jaringan", "Robinhood Chain"],
   ];
@@ -249,7 +252,7 @@ async function askNext() {
      • Ticker: <b>$${escapeHtml(draft.ticker)}</b><br>
      • X: <b>${draft.x ? "@" + escapeHtml(draft.x) : "—"}</b><br>
      • Website: <b>${draft.website ? escapeHtml(draft.website) : "—"}</b><br>
-     • Pajak: <b>${TAX}%</b> setiap beli & jual, seluruhnya mengalir ke ${recipient}<br>
+     • Pajak: <b>${TAX}%</b> setiap beli & jual — <b>${CREATOR_FEE}%</b> mengalir ke ${recipient}, <b>${PROTOCOL_FEE}%</b> sebagai biaya protokol<br>
      Luncurkan sekarang? Kamu masih bisa mengubah detail, mis. <code>ticker ABC</code>.
      <div class="actions"><button class="btn btn-primary" data-act="deploy">Luncurkan</button><button class="btn btn-ghost" data-act="cancel">Batal</button></div>`,
     900
@@ -314,7 +317,7 @@ async function deploy() {
   }
   const steps = [
     "🧠 Menyusun smart contract dari arsitektur teraudit…",
-    `💸 Mengarahkan pajak ${TAX}% ke wallet pembuat ${shortAddr(wallet)}…`,
+    `💸 Mengarahkan fee ${CREATOR_FEE}% ke wallet pembuat ${shortAddr(wallet)} dan ${PROTOCOL_FEE}% ke protokol…`,
     "🔗 Menyematkan tautan X dan website ke metadata token…",
     "✍️ Menunggu tanda tangan transaksi…",
     "🚀 Mengirim transaksi ke Robinhood Chain…",
@@ -330,7 +333,7 @@ async function deploy() {
     `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.ticker)}) resmi hidup!<br>
      Kontrak: <code>${tok.address}</code><br>
      Tx: <code>${tx.slice(0, 18)}…</code><br>
-     Pajak ${TAX}% dari setiap transaksi kini mengalir ke <code>${shortAddr(wallet)}</code>.<br>
+     Dari pajak ${TAX}% setiap transaksi, ${CREATOR_FEE}% kini mengalir ke <code>${shortAddr(wallet)}</code> dan ${PROTOCOL_FEE}% menjadi biaya protokol.<br>
      <small class="muted">*Ini simulasi — alamat & hash di atas bukan transaksi nyata.</small>`,
     900
   );
@@ -347,4 +350,4 @@ $("#chips").addEventListener("click", (e) => {
   if (e.target.tagName === "BUTTON") handle(e.target.textContent);
 });
 
-addMsg(`Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Robinhood Chain</b>. Cukup berikan <b>nama</b>, <b>ticker</b>, akun <b>X</b>, dan <b>website</b>; pajak ${TAX}% setiap transaksi akan mengalir langsung ke wallet-mu.`);
+addMsg(`Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Robinhood Chain</b>. Cukup berikan <b>nama</b>, <b>ticker</b>, akun <b>X</b>, dan <b>website</b>; dari pajak ${TAX}% setiap transaksi, ${CREATOR_FEE}% mengalir langsung ke wallet-mu.`);
