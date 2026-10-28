@@ -193,9 +193,9 @@ h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.15; margin-top: 10px; let
 .phase h3 { margin: 6px 0; }
 .phase p { color: var(--muted); font-size: 14.5px; }
 .phase.done { border-color: rgba(0,224,184,.4); }
-.phase.done em::after { content: " · selesai"; color: var(--teal); }
+.phase.done em::after { content: " · complete"; color: var(--teal); }
 .phase.active { border-color: rgba(124,92,255,.6); box-shadow: 0 0 40px -10px rgba(124,92,255,.6); }
-.phase.active em::after { content: " · berjalan"; color: var(--violet); }
+.phase.active em::after { content: " · in progress"; color: var(--violet); }
 
 /* FAQ */
 .faq { max-width: 780px; margin: 0 auto; display: grid; gap: 12px; }

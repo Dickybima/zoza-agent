@@ -1,22 +1,22 @@
 # Zoza
 
-Website landing page untuk **Zoza** — AI agent pembuat token yang dibangun di atas jaringan **Robinhood Chain**.
+Landing page for **Zoza** — an AI agent that launches tokens on **Robinhood Chain**.
 
-## Isi
+## What's inside
 
-- Hero dengan animasi terminal agent
-- Fitur, cara kerja, info Robinhood Chain, roadmap, FAQ
-- **Demo agent interaktif**: cukup berikan nama, ticker, akun X, dan website (mis. `token Nusantara ticker NUSA x @nusantara web nusantara.io`). Pajak tetap 3% beli & jual: 2% ke wallet pembuat token, 1% biaya protokol. Zoza menyusun ringkasan lalu mensimulasikan peluncuran.
+- Hero with an animated agent terminal
+- Capabilities, how it works, network, roadmap, and FAQ sections
+- **Interactive agent demo**: just provide a name, ticker, X account, and website (e.g. `token Liberty ticker LBTY x @liberty web liberty.io`). X and website can be skipped. Every token carries a fixed 3% buy & sell tax: 2% to the creator's wallet, 1% protocol fee. Zoza builds a blueprint and simulates the launch.
 
-> Demo bersifat simulasi — tidak ada transaksi on-chain yang dikirim.
+> The demo is a simulation — no on-chain transactions are sent.
 
-## Menjalankan
+## Running locally
 
-Situs statis tanpa build step. Buka `index.html` langsung, atau:
+Static site, no build step. Open `index.html` directly, or:
 
 ```bash
 python3 -m http.server 8000
-# lalu buka http://localhost:8000
+# then visit http://localhost:8000
 ```
 
-Bisa langsung di-host di GitHub Pages, Vercel, atau Netlify.
+Deploys as-is to GitHub Pages, Vercel, or Netlify.
