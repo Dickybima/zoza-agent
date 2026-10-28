@@ -2,8 +2,6 @@ import { Logo } from "@/components/site/logo";
 
 const LINKS = [
   { href: "#", label: "X" },
-  { href: "#", label: "Telegram" },
-  { href: "#", label: "Docs" },
 ];
 
 export function SiteFooter() {
