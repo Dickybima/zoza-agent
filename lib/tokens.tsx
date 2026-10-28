@@ -8,9 +8,9 @@ import type { LaunchedToken } from "@/lib/agent";
 // lives in this browser's localStorage (with an in-memory fallback); a feed
 // shared by every visitor would index the launch factory's TokenLaunched
 // events on Robinhood Chain. Bumping the version starts every browser with
-// an empty list (v1: simulated launches, v2: list cleared on request).
-const STORE_KEY = "zoza.tokens.v3";
-const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2"];
+// an empty list (v1: simulated launches, v2–v3: lists cleared on request).
+const STORE_KEY = "zoza.tokens.v4";
+const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2", "zoza.tokens.v3"];
 const EMPTY: LaunchedToken[] = [];
 
 // drop earlier lists so they don't linger in storage
