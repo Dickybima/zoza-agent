@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zoza — AI Agent Pembuat Token di Pons V2</title>
+  <meta name="description" content="Zoza adalah AI agent yang membuat dan meluncurkan token hanya dengan satu perintah, dibangun di atas jaringan Pons V2." />
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a href="#" class="brand">
+      <img src="assets/logo.svg" alt="" width="32" height="32" />
+      <span>ZOZA</span>
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a href="#fitur">Fitur</a>
+      <a href="#cara-kerja">Cara Kerja</a>
+      <a href="#agent">Coba Agent</a>
+      <a href="#pons">Pons V2</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="btn btn-ghost" id="connectBtn">Hubungkan Wallet</button>
+      <button class="nav-toggle" id="navToggle" aria-label="Buka menu">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-text">
+        <span class="pill"><span class="dot"></span> Live di jaringan Pons V2</span>
+        <h1>Buat token dengan <span class="grad">satu kalimat.</span></h1>
+        <p class="lead">
+          Zoza adalah AI agent yang merancang, mengonfigurasi, dan meluncurkan token untukmu —
+          cukup ketik apa yang kamu mau. Tanpa coding, tanpa ribet, berjalan di atas jaringan
+          <strong>Pons V2</strong> yang cepat dan murah.
+        </p>
+        <div class="hero-cta">
+          <a href="#agent" class="btn btn-primary">Mulai dengan Zoza →</a>
+          <a href="#cara-kerja" class="btn btn-ghost">Pelajari cara kerjanya</a>
+        </div>
+        <div class="stats">
+          <div><strong data-count="12840">0</strong><span>Token dibuat</span></div>
+          <div><strong data-count="38">0</strong><span>Detik rata-rata deploy</span></div>
+          <div><strong data-count="9500">0</strong><span>Kreator aktif</span></div>
+        </div>
+      </div>
+
+      <div class="hero-card">
+        <div class="term-head"><span></span><span></span><span></span><em>zoza-agent</em></div>
+        <div class="term-body" id="heroTerm"></div>
+      </div>
+    </section>
+
+    <!-- FITUR -->
+    <section id="fitur" class="section">
+      <div class="section-head">
+        <span class="eyebrow">Fitur</span>
+        <h2>Semua yang kamu butuhkan untuk meluncurkan token</h2>
+      </div>
+      <div class="grid-3">
+        <article class="card">
+          <div class="icon">💬</div>
+          <h3>Bahasa Natural</h3>
+          <p>Jelaskan tokenmu dengan bahasa sehari-hari. Zoza memahami nama, simbol, supply, pajak, dan distribusi.</p>
+        </article>
+        <article class="card">
+          <div class="icon">🛡️</div>
+          <h3>Kontrak Teraudit</h3>
+          <p>Token dibuat dari template smart contract standar yang sudah diaudit, dengan opsi renounce ownership & lock likuiditas.</p>
+        </article>
+        <article class="card">
+          <div class="icon">⚡</div>
+          <h3>Deploy Instan</h3>
+          <p>Diluncurkan langsung ke Pons V2 dalam hitungan detik dengan biaya gas yang sangat rendah.</p>
+        </article>
+        <article class="card">
+          <div class="icon">💧</div>
+          <h3>Likuiditas Otomatis</h3>
+          <p>Zoza bisa langsung membuat pool likuiditas dan mengunci LP agar komunitasmu lebih percaya.</p>
+        </article>
+        <article class="card">
+          <div class="icon">🎨</div>
+          <h3>Branding Otomatis</h3>
+          <p>Logo, deskripsi, dan materi peluncuran dihasilkan AI agar tokenmu siap dipromosikan.</p>
+        </article>
+        <article class="card">
+          <div class="icon">📊</div>
+          <h3>Dashboard Kreator</h3>
+          <p>Pantau holder, volume, dan harga tokenmu secara real-time dari satu tempat.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- CARA KERJA -->
+    <section id="cara-kerja" class="section">
+      <div class="section-head">
+        <span class="eyebrow">Cara Kerja</span>
+        <h2>Dari ide ke on-chain dalam 4 langkah</h2>
+      </div>
+      <ol class="steps">
+        <li><span>01</span><h3>Hubungkan wallet</h3><p>Sambungkan wallet yang terhubung ke jaringan Pons V2.</p></li>
+        <li><span>02</span><h3>Tulis perintah</h3><p>Contoh: “Buat token Kucing Bulan, simbol MEOW, supply 1 miliar.”</p></li>
+        <li><span>03</span><h3>Review & konfirmasi</h3><p>Zoza menampilkan ringkasan parameter. Ubah apa pun sebelum lanjut.</p></li>
+        <li><span>04</span><h3>Deploy</h3><p>Tanda tangani transaksi — tokenmu langsung live di Pons V2.</p></li>
+      </ol>
+    </section>
+
+    <!-- AGENT DEMO -->
+    <section id="agent" class="section">
+      <div class="section-head">
+        <span class="eyebrow">Coba Agent</span>
+        <h2>Ngobrol dengan Zoza</h2>
+        <p class="muted">Mode demo — simulasi, tidak ada transaksi nyata yang dikirim.</p>
+      </div>
+
+      <div class="agent">
+        <div class="chat">
+          <div class="chat-log" id="chatLog"></div>
+          <div class="chips" id="chips">
+            <button>Buat token Kucing Bulan simbol MEOW supply 1000000000</button>
+            <button>Token ZetaCoin ZETA supply 21 juta pajak 2%</button>
+            <button>Buat token komunitas GARUDA supply 500 juta burn 1%</button>
+          </div>
+          <form class="chat-input" id="chatForm">
+            <input id="chatInput" type="text" autocomplete="off" placeholder="Contoh: buat token Nusantara simbol NUSA supply 100 juta" />
+            <button class="btn btn-primary" type="submit">Kirim</button>
+          </form>
+        </div>
+
+        <aside class="preview" id="preview">
+          <div class="preview-empty">
+            <img src="assets/logo.svg" alt="" width="56" height="56" />
+            <p>Ringkasan token akan muncul di sini.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- PONS -->
+    <section id="pons" class="section pons">
+      <div class="pons-text">
+        <span class="eyebrow">Dibangun di atas Pons V2</span>
+        <h2>Infrastruktur yang cepat, murah, dan siap skala</h2>
+        <p>
+          Zoza berjalan secara native di jaringan Pons V2. Setiap token yang dibuat agent
+          adalah aset on-chain penuh milikmu — transparan, dapat diverifikasi, dan langsung
+          bisa diperdagangkan di ekosistem Pons.
+        </p>
+        <ul class="checks">
+          <li>Finalitas transaksi cepat</li>
+          <li>Biaya gas sangat rendah</li>
+          <li>Kompatibel dengan standar token populer</li>
+          <li>Kontrak terverifikasi di explorer</li>
+        </ul>
+      </div>
+      <div class="pons-visual" aria-hidden="true">
+        <div class="ring r1"></div>
+        <div class="ring r2"></div>
+        <div class="ring r3"></div>
+        <div class="core">PONS<br /><small>V2</small></div>
+        <div class="orb o1">Z</div>
+        <div class="orb o2">$</div>
+        <div class="orb o3">◆</div>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="roadmap" class="section">
+      <div class="section-head">
+        <span class="eyebrow">Roadmap</span>
+        <h2>Perjalanan Zoza</h2>
+      </div>
+      <div class="roadmap">
+        <div class="phase done"><em>Fase 1</em><h3>Genesis</h3><p>Peluncuran agent, pembuatan token via chat, deploy ke Pons V2.</p></div>
+        <div class="phase active"><em>Fase 2</em><h3>Liquidity</h3><p>Pool likuiditas otomatis, LP lock, dan dashboard kreator.</p></div>
+        <div class="phase"><em>Fase 3</em><h3>Multi-Agent</h3><p>Agent marketing, agent komunitas, dan agent analitik yang bekerja bersama.</p></div>
+        <div class="phase"><em>Fase 4</em><h3>Ekosistem</h3><p>SDK & API Zoza untuk developer, integrasi lintas jaringan.</p></div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section">
+      <div class="section-head">
+        <span class="eyebrow">FAQ</span>
+        <h2>Pertanyaan yang sering diajukan</h2>
+      </div>
+      <div class="faq">
+        <details><summary>Apa itu Zoza?</summary><p>Zoza adalah AI agent yang membantu siapa pun membuat dan meluncurkan token di jaringan Pons V2 hanya dengan perintah bahasa natural.</p></details>
+        <details><summary>Apakah saya perlu bisa coding?</summary><p>Tidak sama sekali. Cukup jelaskan token yang kamu inginkan, Zoza yang menangani smart contract dan deployment.</p></details>
+        <details><summary>Siapa pemilik token yang dibuat?</summary><p>Kamu. Token dideploy dari wallet-mu sendiri sehingga kepemilikan kontrak dan supply ada di tanganmu.</p></details>
+        <details><summary>Berapa biayanya?</summary><p>Kamu hanya membayar biaya gas jaringan Pons V2 ditambah biaya layanan kecil yang ditampilkan sebelum konfirmasi.</p></details>
+        <details><summary>Apakah aman?</summary><p>Zoza memakai template kontrak standar dan tidak pernah meminta private key. Selalu lakukan riset sendiri (DYOR) sebelum berinvestasi pada token apa pun.</p></details>
+      </div>
+    </section>
+
+    <section class="cta">
+      <h2>Siap meluncurkan token pertamamu?</h2>
+      <p>Bergabung dengan ribuan kreator yang sudah membangun bersama Zoza di Pons V2.</p>
+      <a href="#agent" class="btn btn-primary">Luncurkan Sekarang →</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="brand"><img src="assets/logo.svg" alt="" width="24" height="24" /><span>ZOZA</span></div>
+    <p class="muted">© <span id="year"></span> Zoza Agent · Dibangun di atas Pons V2</p>
+    <div class="socials">
+      <a href="#" aria-label="X / Twitter">X</a>
+      <a href="#" aria-label="Telegram">Telegram</a>
+      <a href="#" aria-label="Docs">Docs</a>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
