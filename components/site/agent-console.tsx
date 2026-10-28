@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import type { FormEvent, ReactNode } from "react";
-import { ArrowRightIcon, CornerDownLeftIcon } from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 
 import {
   CANCEL,
@@ -24,157 +23,80 @@ import type { Draft, Field } from "@/lib/agent";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/site/logo";
-import { Section, SectionHeading } from "@/components/site/section";
+import MorphOrb from "@/components/ui/ai-thiking-orb-and-input";
 
-type Message = { id: number; role: "bot" | "user"; content: ReactNode; typing?: boolean };
 type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean };
+type Turn = { you: string; zoza: string };
 
-const QUESTIONS: Record<Field, ReactNode> = {
-  name: <>What would you like to <b>name</b> your token?</>,
-  ticker: <>Choose a <b>ticker</b> (2–10 characters), e.g. <Code>LBTY</Code>.</>,
-  x: <>Link your project’s <b>X</b> account — <Code>@handle</Code> or <Code>x.com/handle</Code>. Type <Code>skip</Code> if you don’t have one yet.</>,
-  website: <>Finally, what’s the <b>website</b>? Type <Code>skip</Code> if you don’t have one yet.</>,
+// Replies render inside the orb's answer card, so they stay short plain text.
+const QUESTIONS: Record<Field, string> = {
+  name: "What would you like to name your token?",
+  ticker: "Now choose a ticker, 2 to 10 characters, like LBTY.",
+  x: "Link your project’s X account (@handle or x.com/handle), or type skip.",
+  website: "Last one: what’s the website? Type skip if you don’t have one yet.",
 };
 
 const EXAMPLES = [
-  "Token Moon Cat ticker MEOW x @mooncat web mooncat.xyz",
-  "Token ZetaCoin ticker ZETA x x.com/zetacoin website zetacoin.io",
-  "Token Liberty",
+  "token Moon Cat ticker MEOW x @mooncat web mooncat.xyz",
+  "token ZetaCoin ticker ZETA x x.com/zetacoin website zetacoin.io",
+  "token Liberty",
 ];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function Code({ children }: { children: ReactNode }) {
-  return <code className="break-all border border-border bg-background px-1 py-px text-[0.92em] text-signal">{children}</code>;
+/** Types `text` into the orb's input (only while it is idle and editable). */
+function fillPrompt(text: string) {
+  const el = document.querySelector<HTMLInputElement>(".mo-field");
+  if (!el || el.closest("[inert]")) return;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(el, text);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.focus();
 }
 
 export function AgentConsole() {
   const { address, connect } = useWallet();
   const { publish } = useTokens();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
-  const [input, setInput] = useState("");
-  const logRef = useRef<HTMLDivElement>(null);
-  const idRef = useRef(0);
+  const [log, setLog] = useState<Turn[]>([]);
   const draftRef = useRef<Draft | null>(null);
   const askingRef = useRef<Field | null>(null);
   const readyRef = useRef(false);
-  const addressRef = useRef(address);
-  useEffect(() => {
-    addressRef.current = address;
-  }, [address]);
-
-  const push = useCallback((m: Omit<Message, "id">) => {
-    const id = ++idRef.current;
-    setMessages((prev) => [...prev, { ...m, id }]);
-    return id;
-  }, []);
-
-  const botSay = useCallback(
-    async (content: ReactNode, delay = 700) => {
-      const id = push({ role: "bot", content: null, typing: true });
-      await sleep(delay);
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, content, typing: false } : m)));
-    },
-    [push],
-  );
-
-  // keep the log pinned to the newest line without scrolling the page
-  useEffect(() => {
-    const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
-  useEffect(() => {
-    push({
-      role: "bot",
-      content: (
-        <>
-          Welcome. I’m <b>Zoza</b> — the agent that turns your ideas into tokens on <b>{NETWORK}</b>. Just share a{" "}
-          <b>name</b>, <b>ticker</b>, <b>X</b> account, and <b>website</b>. Of the {TAX}% tax on every trade, {CREATOR_FEE}% flows
-          straight to your wallet.
-        </>
-      ),
-    });
-  }, [push]);
 
   const render = (tok: Draft, status: string) => setBlueprint({ tok: { ...tok }, status });
 
-  // `handle` is referenced from buttons inside earlier messages, so route it
-  // through a ref to always reach the latest closure
-  const handleRef = useRef<(text: string) => void>(() => {});
-
-  const askNext = async () => {
+  const askNext = (): string => {
     const draft = draftRef.current!;
     const f = nextMissing(draft);
     if (f) {
       askingRef.current = f;
       render(draft, "gathering details");
-      return botSay(QUESTIONS[f]);
+      return QUESTIONS[f];
     }
     askingRef.current = null;
     readyRef.current = true;
     render(draft, "awaiting confirmation");
-    const wallet = addressRef.current;
-    await botSay(
-      <>
-        Your token blueprint is ready:
-        <ul className="my-2 space-y-0.5">
-          <li>• Name: <b>{draft.name}</b></li>
-          <li>• Ticker: <b>${draft.ticker}</b></li>
-          <li>• X: <b>{draft.x ? "@" + draft.x : "—"}</b></li>
-          <li>• Website: <b>{draft.website || "—"}</b></li>
-          <li>
-            • Tax: <b>{TAX}%</b> on every buy & sell — <b>{CREATOR_FEE}%</b> flows to{" "}
-            {wallet ? <Code>{shortAddr(wallet)}</Code> : "the wallet you launch from"}, <b>{PROTOCOL_FEE}%</b> as a protocol fee
-          </li>
-        </ul>
-        Launch now? You can still refine any detail, e.g. <Code>ticker ABC</Code>.
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" variant="signal" onClick={() => handleRef.current("Launch")}>
-            Launch <ArrowRightIcon />
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => handleRef.current("Cancel")}>
-            Cancel
-          </Button>
-        </div>
-      </>,
-      900,
-    );
+    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Type launch to deploy, or edit any field.`;
   };
 
-  const deploy = async () => {
+  const deploy = async (): Promise<string> => {
     const tok = draftRef.current!;
+    const wallet = address ?? (await connect());
+    if (!wallet) return "No wallet connected, so nothing was launched. Type launch to try again.";
     draftRef.current = null;
     readyRef.current = false;
-    let wallet = addressRef.current;
-    if (!wallet) {
-      await botSay("Choose a wallet to continue…", 400);
-      wallet = await connect();
-      if (!wallet) return botSay("Wallet not connected. Please try again.");
-    }
+
     const startedAt = performance.now();
-    const steps = [
-      "Composing your smart contract from audited architecture…",
-      `Routing the ${CREATOR_FEE}% creator fee to ${shortAddr(wallet)} and ${PROTOCOL_FEE}% to the protocol…`,
-      "Embedding your X and website links in token metadata…",
-      "Awaiting your transaction signature…",
-      `Broadcasting to ${NETWORK}…`,
-    ];
-    for (const [i, s] of steps.entries()) {
-      render(tok, s.toLowerCase().replace(/…$/, ""));
-      await botSay(
-        <span className="text-muted-foreground">
-          [{i + 1}/{steps.length}] {s}
-        </span>,
-        650,
-      );
+    for (const s of [
+      "composing contract from audited architecture",
+      `routing ${CREATOR_FEE}% creator fee to ${shortAddr(wallet)}`,
+      "embedding X and website metadata",
+      `broadcasting to ${NETWORK}`,
+    ]) {
+      render(tok, s);
+      await sleep(650);
     }
     const addr = "0x" + randHex(40);
-    const tx = "0x" + randHex(64);
-    const launchSeconds = Math.round((performance.now() - startedAt) / 100) / 10;
     setBlueprint({ tok: { ...tok, address: addr }, status: `LIVE on ${NETWORK} (demo)`, live: true });
     publish({
       name: tok.name!,
@@ -183,46 +105,26 @@ export function AgentConsole() {
       website: tok.website ?? null,
       address: addr,
       creator: wallet,
-      tx,
+      tx: "0x" + randHex(64),
       createdAt: Date.now(),
-      launchSeconds,
+      launchSeconds: Math.round((performance.now() - startedAt) / 100) / 10,
     });
-    await botSay(
-      <>
-        <span className="text-signal">✓</span> <b>{tok.name}</b> (${tok.ticker}) is officially live!
-        <br />
-        Contract: <Code>{addr}</Code>
-        <br />
-        Tx: <Code>{tx.slice(0, 18)}…</Code>
-        <br />
-        Of the {TAX}% tax on every trade, {CREATOR_FEE}% now flows to <Code>{shortAddr(wallet)}</Code> and {PROTOCOL_FEE}% goes to
-        the protocol.
-        <div className="mt-3">
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/explore">
-              View in Explore <ArrowRightIcon />
-            </Link>
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">*This is a simulation — the address and hash above are not real transactions.</p>
-      </>,
-      900,
-    );
+    return `${tok.name} ($${tok.ticker}) is live on ${NETWORK} (demo). Contract ${shortAddr(addr)}. ${CREATOR_FEE}% of every trade now flows to ${shortAddr(wallet)}.`;
   };
 
-  const handle = async (text: string) => {
-    push({ role: "user", content: text });
+  const reply = async (text: string): Promise<string> => {
     const lower = text.trim().toLowerCase();
 
     if (draftRef.current && CANCEL.test(lower)) {
       draftRef.current = null;
       askingRef.current = null;
       readyRef.current = false;
-      return botSay("Understood — draft discarded. Tell me about the next token you’d like to create.");
+      setBlueprint(null);
+      return "Understood, draft discarded. Tell me about the next token you’d like to create.";
     }
     if (CONFIRM.test(lower)) {
       if (readyRef.current) return deploy();
-      if (askingRef.current) return botSay(<>Almost there — a few details are still missing. {QUESTIONS[askingRef.current]}</>);
+      if (askingRef.current) return `Almost there, a few details are still missing. ${QUESTIONS[askingRef.current]}`;
     }
 
     const p = parsePrompt(text);
@@ -232,7 +134,7 @@ export function AgentConsole() {
     if (!draft) {
       if (!found) {
         const a = parseAnswer("name", text);
-        if (!a.name) return botSay(QUESTIONS.name);
+        if (!a.name) return QUESTIONS.name;
         draftRef.current = a;
       } else draftRef.current = p;
     } else if (p.name && readyRef.current && /\btoken\b/i.test(text)) {
@@ -241,101 +143,84 @@ export function AgentConsole() {
       Object.assign(draft, p);
     } else if (askingRef.current) {
       const a = parseAnswer(askingRef.current, text);
-      if (!Object.keys(a).length) return botSay(<>That format doesn’t look quite right. {QUESTIONS[askingRef.current]}</>);
+      if (!Object.keys(a).length) return `That doesn’t look quite right. ${QUESTIONS[askingRef.current]}`;
       Object.assign(draft, a);
     } else {
-      return botSay(
-        <>
-          To refine a detail, try <Code>name Liberty</Code>, <Code>ticker LBTY</Code>, <Code>x @liberty</Code>, or{" "}
-          <Code>web liberty.io</Code>. Type <Code>launch</Code> when you’re ready.
-        </>,
-      );
+      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Type launch when you’re ready.";
     }
 
     readyRef.current = false;
     return askNext();
   };
-  useEffect(() => {
-    handleRef.current = handle;
-  });
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const v = input.trim();
-    if (!v) return;
-    setInput("");
-    handle(v);
+  const onSubmit = async (text: string) => {
+    const answer = await reply(text);
+    setLog((l) => [...l, { you: text, zoza: answer }]);
+    return answer;
   };
 
   return (
-    <Section id="agent">
-      <SectionHeading index="03" label="The lab" title="Converse with Zoza.">
-        Demo mode — every launch here is a simulation. No real transactions are sent.
-      </SectionHeading>
+    <div className="relative">
+      <MorphOrb onSubmit={onSubmit} minThinkMs={1400} />
 
-      <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
-        {/* terminal */}
-        <div className="flex h-[600px] min-w-0 flex-col border border-border bg-card/50">
-          <WindowBar title="zoza@robinhood-chain: ~/launch" />
-          <div ref={logRef} className="flex-1 space-y-4 overflow-y-auto p-4 text-sm leading-relaxed sm:p-5">
-            {messages.map((m) => (
-              <div key={m.id} className="flex gap-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
-                <span className={cn("shrink-0 select-none", m.role === "user" ? "text-signal" : "text-muted-foreground")}>
-                  {m.role === "user" ? "you ›" : "zoza ›"}
-                </span>
-                <div className={cn("min-w-0 flex-1", m.role === "user" && "text-foreground")}>
-                  {m.typing ? <span className="inline-block h-4 w-2 translate-y-0.5 animate-blink bg-signal" /> : m.content}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2 overflow-x-auto border-t border-dashed border-border px-4 py-3 sm:px-5">
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => handle(ex)}
-                className="shrink-0 border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
-          <form onSubmit={onSubmit} className="flex items-center gap-3 border-t border-border px-4 py-3 sm:px-5">
-            <span className="text-signal">›</span>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="token Liberty ticker LBTY x @liberty web liberty.io"
-              aria-label="Message Zoza"
-              autoComplete="off"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
-            />
-            <Button type="submit" size="sm">
-              Send <CornerDownLeftIcon />
-            </Button>
-          </form>
-        </div>
-
-        {/* blueprint */}
-        <aside className="flex min-w-0 flex-col border border-border bg-card/50">
-          <WindowBar title="blueprint.json" />
-          {blueprint ? <BlueprintView bp={blueprint} wallet={address} /> : (
-            <div className="grid flex-1 place-items-center p-10 text-center text-sm text-muted-foreground">
-              <div className="grid justify-items-center gap-4">
-                <Logo className="size-14 text-foreground/80" />
-                <pre className="text-xs leading-relaxed">{"┌──────────────────────┐\n│  awaiting your idea  │\n└──────────────────────┘"}</pre>
-                <p>Your token’s blueprint will take shape here.</p>
-              </div>
-            </div>
-          )}
-        </aside>
+      {/* compact title on small screens, where the panels stack below the stage */}
+      <div className="pointer-events-none absolute inset-x-0 top-20 px-4 text-center sm:px-6 xl:hidden">
+        <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+          <span className="text-signal">[ 03 ]</span> The lab
+        </p>
+        <h1 className="mt-2 text-xl font-semibold tracking-tight">Converse with Zoza.</h1>
+        <p className="mt-2 text-xs text-muted-foreground">Examples &amp; blueprint below ↓</p>
       </div>
-    </Section>
+
+      {/* side panels: float beside the stage on wide screens, stack below it otherwise */}
+      <div className="pointer-events-none mx-auto grid max-w-6xl gap-6 px-4 pb-16 sm:px-6 xl:absolute xl:inset-x-0 xl:top-20 xl:max-w-none xl:grid-cols-[19rem_1fr_21rem] xl:pb-0">
+        <IntroPanel />
+        <div className="hidden xl:block" />
+        <div className="pointer-events-auto grid content-start gap-4">
+          <BlueprintPanel bp={blueprint} wallet={address} />
+          {log.length ? <SessionLog log={log} /> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function WindowBar({ title }: { title: string }) {
+function IntroPanel() {
+  return (
+    <div className="pointer-events-auto content-start">
+      <div className="hidden xl:block">
+        <p className="mb-3 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+          <span className="text-signal">[ 03 ]</span> The lab
+        </p>
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight">Converse with Zoza.</h1>
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        Share a name, ticker, X account and website. Zoza asks for anything missing, then launches on {NETWORK} with a{" "}
+        {TAX}% tax — {CREATOR_FEE}% to you.
+      </p>
+      <p className="mt-6 mb-2 text-xs text-muted-foreground">{"// try one"}</p>
+      <ul className="grid gap-2">
+        {EXAMPLES.map((ex) => (
+          <li key={ex}>
+            <button
+              type="button"
+              onClick={() => fillPrompt(ex)}
+              className="w-full border border-border bg-background/70 px-3 py-2 text-left text-xs text-muted-foreground backdrop-blur-sm transition-colors hover:border-foreground/40 hover:text-foreground"
+            >
+              <span className="text-signal">›</span> {ex}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+        Commands: <span className="text-foreground">launch</span>, <span className="text-foreground">cancel</span>,{" "}
+        <span className="text-foreground">skip</span>. Demo mode — no real transactions.
+      </p>
+    </div>
+  );
+}
+
+function PanelBar({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
       <span aria-hidden className="flex gap-1.5">
@@ -348,7 +233,15 @@ function WindowBar({ title }: { title: string }) {
   );
 }
 
-function BlueprintView({ bp, wallet }: { bp: Blueprint; wallet: string | null }) {
+function BlueprintPanel({ bp, wallet }: { bp: Blueprint | null; wallet: string | null }) {
+  if (!bp) {
+    return (
+      <div className="border border-border bg-background/80 backdrop-blur-sm">
+        <PanelBar title="blueprint.json" />
+        <p className="px-4 py-6 text-center text-xs text-muted-foreground">Your token’s blueprint will take shape here.</p>
+      </div>
+    );
+  }
   const { tok } = bp;
   const has = (f: keyof Draft) => f in tok;
   const rows: [string, string][] = [
@@ -360,41 +253,67 @@ function BlueprintView({ bp, wallet }: { bp: Blueprint; wallet: string | null })
     [`creator_fee (${CREATOR_FEE}%)`, wallet ? shortAddr(wallet) : "creator wallet"],
     [`protocol_fee (${PROTOCOL_FEE}%)`, "protocol"],
     ["supply", fmt(SUPPLY)],
-    ["network", NETWORK],
   ];
   if (tok.address) rows.push(["contract", shortAddr(tok.address)]);
 
   return (
-    <div className="flex flex-1 flex-col p-5">
-      <div className="mb-5 flex items-center gap-4">
-        <span className="grid size-12 shrink-0 place-items-center border border-border bg-background text-sm font-bold">
-          {(tok.ticker || tok.name || "··").slice(0, 2).toUpperCase()}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-lg font-semibold">{tok.name || "New token"}</p>
-          <p className="text-xs text-muted-foreground">{tok.ticker ? "$" + tok.ticker : "ticker pending"}</p>
-        </div>
-      </div>
-      <dl className="space-y-2.5 text-[13px]">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-baseline gap-2">
-            <dt className="shrink-0 text-muted-foreground">{k}</dt>
-            <span aria-hidden className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-border" />
-            <dd className="truncate text-right">{v}</dd>
+    <div className="border border-border bg-background/80 backdrop-blur-sm">
+      <PanelBar title="blueprint.json" />
+      <div className="p-4">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center border border-border bg-background text-sm font-bold">
+            {(tok.ticker || tok.name || "··").slice(0, 2).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{tok.name || "New token"}</p>
+            <p className="text-xs text-muted-foreground">{tok.ticker ? "$" + tok.ticker : "ticker pending"}</p>
           </div>
-        ))}
-      </dl>
-      <div className="mt-auto pt-6">
+        </div>
+        <dl className="space-y-2 text-xs">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex items-baseline gap-2">
+              <dt className="shrink-0 text-muted-foreground">{k}</dt>
+              <span aria-hidden className="min-w-4 flex-1 translate-y-[-3px] border-b border-dotted border-border" />
+              <dd className="truncate text-right">{v}</dd>
+            </div>
+          ))}
+        </dl>
         <p
           className={cn(
-            "border px-3 py-2 text-xs",
+            "mt-4 border px-3 py-2 text-xs",
             bp.live ? "border-signal/50 bg-signal/10 text-signal" : "border-border text-muted-foreground",
           )}
         >
           {bp.live ? "● " : "[ draft ] "}
           {bp.status}
         </p>
+        {bp.live ? (
+          <Link href="/explore" className="mt-3 flex items-center gap-1.5 text-xs text-foreground hover:text-signal">
+            View in Explore <ArrowRightIcon className="size-3.5" />
+          </Link>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function SessionLog({ log }: { log: Turn[] }) {
+  return (
+    <div className="border border-border bg-background/80 backdrop-blur-sm">
+      <PanelBar title="session.log" />
+      {/* newest exchange first */}
+      <ol className="max-h-56 space-y-3 overflow-y-auto p-4 text-xs leading-relaxed">
+        {[...log].reverse().map((t, i) => (
+          <li key={i} className="space-y-1">
+            <p>
+              <span className="text-signal">you ›</span> {t.you}
+            </p>
+            <p className="text-muted-foreground">
+              <span>zoza ›</span> {t.zoza}
+            </p>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

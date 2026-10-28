@@ -21,7 +21,7 @@ npm run lint
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
 app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, roadmap, faq
-components/ui/       shadcn-style primitives + hero-ascii-tunnel.tsx
+components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
 lib/agent.ts         prompt parsing, fees, formatting
@@ -35,6 +35,6 @@ shadcn is configured in `components.json` (aliases `@/components/ui`, `@/lib/uti
 
 ## Agent demo
 
-Give Zoza a name, ticker, X account, and website (e.g. `token Liberty ticker LBTY x @liberty web liberty.io`); X and website can be skipped. Every token carries a fixed 3% buy & sell tax: 2% to the creator's wallet, 1% protocol fee. Launches are simulated — no on-chain transactions are sent — and appear in **Explore** automatically.
+The /agent page uses the MorphOrb component: type into the pill, the orb thinks, and Zoza's reply unfolds as a card (press Reply to answer). Give Zoza a name, ticker, X account, and website (e.g. `token Liberty ticker LBTY x @liberty web liberty.io`); X and website can be skipped. Every token carries a fixed 3% buy & sell tax: 2% to the creator's wallet, 1% protocol fee. Launches are simulated — no on-chain transactions are sent — and appear in **Explore** automatically.
 
 In production, the Explore feed and stats would be read from the launch contract's events on Robinhood Chain instead of browser storage.
