@@ -37,6 +37,7 @@ const QUESTIONS: Record<Field, string> = {
 };
 
 const EXAMPLES = [
+  "name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz",
   "token Moon Cat ticker MEOW x @mooncat web mooncat.xyz",
   "token ZetaCoin ticker ZETA x x.com/zetacoin website zetacoin.io",
   "token Liberty",
@@ -198,6 +199,13 @@ function IntroPanel() {
         Share a name, ticker, X account and website. Zoza asks for anything missing, then launches on {NETWORK} with a{" "}
         {TAX}% tax — {CREATOR_FEE}% to you.
       </p>
+      <p className="mt-6 mb-2 text-xs text-muted-foreground">{"// format"}</p>
+      <pre className="border border-border bg-background/70 px-3 py-2 text-xs leading-relaxed backdrop-blur-sm">
+        <span className="text-muted-foreground">name:</span> Moon Cat{"\n"}
+        <span className="text-muted-foreground">ticker:</span> MEOW{"\n"}
+        <span className="text-muted-foreground">x:</span> @mooncat{"\n"}
+        <span className="text-muted-foreground">website:</span> mooncat.xyz
+      </pre>
       <p className="mt-6 mb-2 text-xs text-muted-foreground">{"// try one"}</p>
       <ul className="grid gap-2">
         {EXAMPLES.map((ex) => (

@@ -64,7 +64,16 @@ const cleanWeb = (v: string) => {
 // "create token Liberty ticker LBTY x @liberty web liberty.io"
 export function parsePrompt(text: string): Draft {
   const out: Draft = {};
-  let t = " " + text.trim() + " ";
+  // "key: value" form, e.g. "name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz".
+  // Multi-line pastes into a single-line input can glue lines together
+  // ("Moon Catticker:"), so split before any "key:" that follows a word.
+  let t =
+    " " +
+    text
+      .replace(/\s+/g, " ")
+      .replace(/(\S)(?<!web)(name|ticker|symbol|twitter|website|site|url|x)\s*:/gi, "$1 $2:")
+      .trim() +
+    " ";
 
   const xm =
     t.match(new RegExp("(?:\\b(?:x|twitter)\\s*:?\\s*)?" + X_URL.source, "i")) ||
@@ -88,7 +97,7 @@ export function parsePrompt(text: string): Draft {
     t = t.replace(tm[0], " ");
   }
   const nm = t.match(
-    /\b(?:token\s+(?:named|called)|named|called|name|token)\s+["“]?([A-Za-z0-9][A-Za-z0-9 \-]{0,30}?)["”]?\s*(?=\s*(?:,|\.|$)|\s+(?:and|with|ticker|symbol|supply|x|twitter|web|website|site|url)\b)/i,
+    /\b(?:token\s+(?:named|called)|named|called|name|token)(?:\s*:\s*|\s+)["“]?([A-Za-z0-9][A-Za-z0-9 \-]{0,30}?)["”]?\s*(?=\s*(?:,|\.|$)|\s+(?:and|with|ticker|symbol|supply|x|twitter|web|website|site|url)\b)/i,
   );
   // "deploy the token please" — filler after "token" is not a name
   if (nm && !/^(please|pls|now|it|this|that|for me|already)$/i.test(nm[1].trim())) out.name = nm[1].trim();
