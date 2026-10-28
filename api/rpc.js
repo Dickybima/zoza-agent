@@ -17,6 +17,8 @@ const ALLOWED = new Set([
   "eth_getBlockByNumber",
   "eth_getTransactionByHash",
   "eth_getTransactionReceipt",
+  // trade history for token pages (CurveBuy / CurveSell events)
+  "eth_getLogs",
 ]);
 const MAX_BATCH = 20;
 

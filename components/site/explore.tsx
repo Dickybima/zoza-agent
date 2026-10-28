@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRightIcon, ArrowUpRightIcon, CopyIcon, GlobeIcon, SearchIcon } from "lucide-react";
+import { isAddress } from "viem";
 
 import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
 import type { LaunchedToken } from "@/lib/agent";
@@ -13,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Section, SectionHeading } from "@/components/site/section";
+import { TokenAvatar } from "@/components/site/token-avatar";
+
+const tokenHref = (t: Pick<LaunchedToken, "address" | "block">) =>
+  `/token?address=${t.address}${t.block ? `&block=${t.block}` : ""}`;
 
 type Sort = "new" | "old" | "az";
 
@@ -68,6 +73,18 @@ export function Explore() {
         </select>
       </div>
 
+      {isAddress(q.trim()) ? (
+        <Link
+          href={`/token?address=${q.trim()}`}
+          className="mb-6 flex items-center justify-between border border-signal/40 bg-signal/5 px-4 py-3 text-sm hover:bg-signal/10"
+        >
+          <span>
+            <span className="text-signal">›</span> open token {shortAddr(q.trim())}
+          </span>
+          <ArrowRightIcon className="size-4" />
+        </Link>
+      ) : null}
+
       {tokens.length === 0 ? (
         <EmptyState>
           <p>No tokens yet. The first launch through Zoza will appear here.</p>
@@ -117,16 +134,14 @@ function TokenCard({ t, fresh }: { t: LaunchedToken; fresh: boolean }) {
 
   return (
     <Card className={fresh ? "border-signal/60 animate-in fade-in-0 zoom-in-95 duration-500" : undefined}>
-      <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center border border-border bg-background text-sm font-bold">
-          {t.ticker.slice(0, 2)}
-        </span>
+      <Link href={tokenHref(t)} className="flex items-start gap-3 hover:text-signal">
+        <TokenAvatar src={t.logo} label={t.ticker} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{t.name}</p>
           <p className="text-xs text-muted-foreground">${t.ticker}</p>
         </div>
         {fresh ? <Badge variant="signal">New</Badge> : null}
-      </div>
+      </Link>
       <dl className="space-y-1.5 text-xs">
         {[
           ["contract", shortAddr(t.address)],
@@ -156,6 +171,11 @@ function TokenCard({ t, fresh }: { t: LaunchedToken; fresh: boolean }) {
             </a>
           </Button>
         ) : null}
+        <Button variant="signal" size="sm" asChild>
+          <Link href={tokenHref(t)}>
+            Trade <ArrowRightIcon />
+          </Link>
+        </Button>
         <Button variant="outline" size="sm" asChild>
           <a href={explorerToken(t.address)} target="_blank" rel="noopener noreferrer">
             Explorer <ArrowUpRightIcon />

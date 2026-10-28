@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRightIcon, RocketIcon } from "lucide-react";
+import { ArrowRightIcon, RefreshCwIcon, RocketIcon } from "lucide-react";
 
 import {
   CREATOR_FEE,
@@ -23,11 +23,13 @@ import type { Draft, Field } from "@/lib/agent";
 import { explorerTx } from "@/lib/chain";
 import { launchToken } from "@/lib/launchpad";
 import type { LaunchError, LaunchResult } from "@/lib/launchpad";
+import { newImageSeed, tokenImageUrl } from "@/lib/token-image";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import MorphOrb from "@/components/ui/ai-thiking-orb-and-input";
+import { TokenAvatar } from "@/components/site/token-avatar";
 
 type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean; tx?: string };
 type Turn = { you: string; zoza: string };
@@ -111,6 +113,8 @@ export function AgentConsole() {
 
   const askNext = (): string => {
     const draft = draftRef.current!;
+    // artwork is generated as soon as the token has a name
+    if (draft.name && draft.seed === undefined) draft.seed = newImageSeed();
     const f = nextMissing(draft);
     if (f) {
       askingRef.current = f;
@@ -135,7 +139,14 @@ export function AgentConsole() {
       result = await launchToken(
         provider,
         wallet,
-        { name: tok.name!, ticker: tok.ticker!, x: tok.x ?? null, website: tok.website ?? null, creatorTaxBps: CREATOR_FEE * 100 },
+        {
+          name: tok.name!,
+          ticker: tok.ticker!,
+          x: tok.x ?? null,
+          website: tok.website ?? null,
+          logo: tokenImageUrl(tok.name!, tok.seed ?? 0),
+          creatorTaxBps: CREATOR_FEE * 100,
+        },
         (status) => render(tok, status),
       );
     } catch (err) {
@@ -156,6 +167,8 @@ export function AgentConsole() {
       website: tok.website ?? null,
       address: result.token,
       curve: result.curve,
+      logo: tokenImageUrl(tok.name!, tok.seed ?? 0),
+      block: Number(result.block),
       creator: wallet,
       tx: result.hash,
       createdAt: Date.now(),
@@ -210,6 +223,14 @@ export function AgentConsole() {
     const answer = await reply(text);
     setLog((l) => [...l, { you: text, zoza: answer }]);
     return answer;
+  };
+
+  // new artwork for the current draft
+  const restyle = () => {
+    const d = draftRef.current;
+    if (!d?.name) return;
+    d.seed = newImageSeed();
+    setBlueprint((bp) => (bp ? { ...bp, tok: { ...d } } : bp));
   };
 
   // after a launch, let the creator read the orb's result, then open Explore
@@ -286,7 +307,13 @@ export function AgentConsole() {
         <IntroPanel />
         <div className="hidden xl:block" />
         <div className="pointer-events-auto grid content-start gap-4">
-          <BlueprintPanel bp={blueprint} wallet={address} onLaunch={ready ? launch : undefined} canLaunch={canLaunch} />
+          <BlueprintPanel
+            bp={blueprint}
+            wallet={address}
+            onLaunch={ready ? launch : undefined}
+            canLaunch={canLaunch}
+            onRestyle={!launching && (phase === "idle" || phase === "answered") ? restyle : undefined}
+          />
           {log.length ? <SessionLog log={log} /> : null}
         </div>
       </div>
@@ -355,11 +382,13 @@ function BlueprintPanel({
   wallet,
   onLaunch,
   canLaunch,
+  onRestyle,
 }: {
   bp: Blueprint | null;
   wallet: string | null;
   onLaunch?: () => void;
   canLaunch: boolean;
+  onRestyle?: () => void;
 }) {
   if (!bp) {
     return (
@@ -388,12 +417,24 @@ function BlueprintPanel({
       <PanelBar title="blueprint.json" />
       <div className="p-4">
         <div className="mb-4 flex items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center border border-border bg-background text-sm font-bold">
-            {(tok.ticker || tok.name || "··").slice(0, 2).toUpperCase()}
-          </span>
-          <div className="min-w-0">
+          <TokenAvatar
+            src={tok.name ? tokenImageUrl(tok.name, tok.seed ?? 0) : null}
+            label={tok.ticker || tok.name || ""}
+            className="size-16"
+          />
+          <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{tok.name || "New token"}</p>
             <p className="text-xs text-muted-foreground">{tok.ticker ? "$" + tok.ticker : "ticker pending"}</p>
+            {tok.name && !bp.live ? (
+              <button
+                type="button"
+                onClick={onRestyle}
+                disabled={!onRestyle}
+                className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                <RefreshCwIcon className="size-3" /> new artwork
+              </button>
+            ) : null}
           </div>
         </div>
         <dl className="space-y-2 text-xs">

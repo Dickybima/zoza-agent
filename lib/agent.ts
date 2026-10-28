@@ -17,6 +17,8 @@ export type Draft = {
   ticker?: string;
   x?: string | null;
   website?: string | null;
+  /** seed for the AI-generated token artwork */
+  seed?: number;
 };
 
 export type LaunchedToken = {
@@ -26,6 +28,9 @@ export type LaunchedToken = {
   website: string | null;
   address: string;
   curve?: string;
+  logo?: string;
+  /** block the token was launched in, where its trade history starts */
+  block?: number;
   creator: string;
   tx: string;
   createdAt: number;

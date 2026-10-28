@@ -48,4 +48,12 @@ Chain reads race three sources and take the first answer: the same-origin proxy 
 
 See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `contractsV2/src/v2/PonsV2LaunchFactory.sol`) and `lib/chain.ts` (RPC, explorer). Verify the factory address on the explorer before relying on it.
 
+### Token artwork
+
+As soon as a draft has a name, Zoza generates mascot artwork for it (e.g. "Moon Cat" → a cat) with Pollinations' free text-to-image endpoint (`lib/token-image.ts`, no API key). "new artwork" re-rolls the seed; the image URL is stored as the token's on-chain `logo`.
+
+### Token pages and trading
+
+`/token?address=0x…` reads everything from chain (`lib/curve.ts`): name, symbol, logo, description and socials from the token's `getTokenInfo()`, the bonding curve's reserves, fees and graduation progress, and its `CurveBuy` / `CurveSell` events, which drive the candlestick chart (lightweight-charts, 1m–1h buckets) and the transactions table. It refreshes every 8 s. The trade panel buys with ETH (`buy`) or sells (`approve` then `sell`) against the curve with a slippage bound; graduated tokens show a notice instead. Any token address can be opened from the Explore search box.
+
 The Explore feed lists tokens launched through Zoza from the current browser (localStorage). A feed shared by every visitor would index `TokenLaunched` events from the factory.
