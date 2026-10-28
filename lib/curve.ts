@@ -3,7 +3,7 @@
 // graduates into its Uniswap V4 pool, every buy and sell settles against the
 // curve in native ETH, and each one emits CurveBuy / CurveSell — the trade
 // history behind the token page's candles and transaction list.
-import { createWalletClient, custom, formatEther, getAddress, parseAbi } from "viem";
+import { createWalletClient, custom, formatEther, getAddress, parseAbi, zeroAddress } from "viem";
 import type { Address, EIP1193Provider, Hash } from "viem";
 
 import { robinhoodChain } from "@/lib/chain";
@@ -311,4 +311,29 @@ export async function trade(
   } catch (err) {
     throw toChainError(err);
   }
+}
+
+// Burns are transfers to the zero address (a real burn, which also lowers
+// totalSupply) or to the conventional dead address.
+export const DEAD_ADDRESS: Address = "0x000000000000000000000000000000000000dEaD";
+const transferEvent = parseAbi(["event Transfer(address indexed from, address indexed to, uint256 value)"])[0];
+
+export type Burn = { block: bigint; tx: Hash; logIndex: number; from: Address; amount: bigint; time: number };
+
+/** Burns of `token` between two blocks, oldest first, with timestamps. */
+export async function fetchBurns(client: Client, token: Address, fromBlock: bigint, toBlock: bigint): Promise<Burn[]> {
+  if (fromBlock > toBlock) return [];
+  const logs = await chunkedLogs(fromBlock, toBlock, (f, t) =>
+    client.getLogs({ address: token, event: transferEvent, args: { to: [zeroAddress, DEAD_ADDRESS] }, fromBlock: f, toBlock: t }),
+  );
+  const recent = logs.slice(-50);
+  await stampBlocks(client, recent.map((l) => l.blockNumber!));
+  return recent.map((l) => ({
+    block: l.blockNumber!,
+    tx: l.transactionHash!,
+    logIndex: l.logIndex!,
+    from: l.args.from!,
+    amount: l.args.value!,
+    time: blockTimes.get(l.blockNumber!) ?? 0,
+  }));
 }
