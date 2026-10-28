@@ -277,4 +277,4 @@ $("#chips").addEventListener("click", (e) => {
   if (e.target.tagName === "BUTTON") handle(e.target.textContent);
 });
 
-addMsg("Halo! Aku <b>Zoza</b> 👋 AI agent pembuat token di jaringan <b>Pons V2</b>. Ceritakan token seperti apa yang ingin kamu luncurkan.");
+addMsg("Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Pons V2</b>. Token seperti apa yang ingin kamu ciptakan hari ini?");
