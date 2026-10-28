@@ -1,11 +1,11 @@
 # Zoza
 
-Website landing page untuk **Zoza** — AI agent pembuat token yang dibangun di atas jaringan **Pons V2**.
+Website landing page untuk **Zoza** — AI agent pembuat token yang dibangun di atas jaringan **Robinhood Chain**.
 
 ## Isi
 
 - Hero dengan animasi terminal agent
-- Fitur, cara kerja, info Pons V2, roadmap, FAQ
+- Fitur, cara kerja, info Robinhood Chain, roadmap, FAQ
 - **Demo agent interaktif**: ketik perintah bahasa natural (mis. `buat token Nusantara simbol NUSA supply 100 juta pajak 2%`) dan Zoza akan menyusun ringkasan token lalu mensimulasikan deploy.
 
 > Demo bersifat simulasi — tidak ada transaksi on-chain yang dikirim.

@@ -40,9 +40,9 @@ const termLines = [
   ['  name    : Nusantara', 8],
   ['  symbol  : NUSA', 8],
   ['  supply  : 100.000.000', 8],
-  ['  network : Pons V2', 8],
+  ['  network : Robinhood Chain', 8],
   ['<span class="k">zoza ›</span> menyusun smart contract…', 18],
-  ['<span class="k">zoza ›</span> deploy ke Pons V2…', 18],
+  ['<span class="k">zoza ›</span> deploy ke Robinhood Chain…', 18],
   ['<span class="ok">✓ token live dalam 3,2 detik</span>', 18],
 ];
 async function runTerm() {
@@ -76,7 +76,7 @@ const io = new IntersectionObserver(
     }),
   { threshold: 0.15 }
 );
-document.querySelectorAll(".card, .steps li, .phase, .faq details, .pons-text, .cta").forEach((el) => {
+document.querySelectorAll(".card, .steps li, .phase, .faq details, .network-text, .cta").forEach((el) => {
   el.classList.add("reveal");
   io.observe(el);
 });
@@ -178,7 +178,7 @@ function renderPreview(tok, status = "Draft — menunggu konfirmasi", live = fal
     ["Decimals", "18"],
     ["Pajak transaksi", (tok.tax ?? 0) + "%"],
     ["Burn per transaksi", (tok.burn ?? 0) + "%"],
-    ["Jaringan", "Pons V2"],
+    ["Jaringan", "Robinhood Chain"],
   ];
   if (tok.address) rows.push(["Alamat kontrak", tok.address.slice(0, 10) + "…" + tok.address.slice(-6)]);
   preview.innerHTML = `
@@ -223,7 +223,7 @@ async function handle(text) {
 
   renderPreview(draft);
   const m = await botSay(
-    `Ini ringkasan tokenmu di Pons V2:<br>
+    `Ini ringkasan tokenmu di Robinhood Chain:<br>
      • Nama: <b>${escapeHtml(draft.name)}</b><br>
      • Simbol: <b>$${escapeHtml(draft.symbol)}</b><br>
      • Supply: <b>${fmt(draft.supply)}</b><br>
@@ -248,7 +248,7 @@ async function deploy() {
     "🧠 Menyusun smart contract dari template teraudit…",
     "🔍 Menjalankan pengecekan keamanan…",
     "✍️ Menunggu tanda tangan transaksi…",
-    "🚀 Mengirim transaksi ke jaringan Pons V2…",
+    "🚀 Mengirim transaksi ke Robinhood Chain…",
   ];
   for (const s of steps) {
     renderPreview(tok, s.replace(/^\S+\s/, ""));
@@ -256,7 +256,7 @@ async function deploy() {
   }
   tok.address = "0x" + randHex(40);
   const tx = "0x" + randHex(64);
-  renderPreview(tok, "● LIVE di Pons V2 (demo)", true);
+  renderPreview(tok, "● LIVE di Robinhood Chain (demo)", true);
   await botSay(
     `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.symbol)}) berhasil diluncurkan!<br>
      Kontrak: <code>${tok.address}</code><br>
@@ -277,4 +277,4 @@ $("#chips").addEventListener("click", (e) => {
   if (e.target.tagName === "BUTTON") handle(e.target.textContent);
 });
 
-addMsg("Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Pons V2</b>. Token seperti apa yang ingin kamu ciptakan hari ini?");
+addMsg("Selamat datang. Aku <b>Zoza</b> — agen yang mewujudkan gagasanmu menjadi token di <b>Robinhood Chain</b>. Token seperti apa yang ingin kamu ciptakan hari ini?");
