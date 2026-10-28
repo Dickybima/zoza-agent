@@ -35,12 +35,12 @@ connectBtn.addEventListener("click", connectWallet);
 
 // ---------- Hero terminal ----------
 const termLines = [
-  ['<span class="p">you ›</span> token Liberty ticker LBTY x @liberty web liberty.io', 40],
+  ['<span class="p">you ›</span> token Test ticker TEST x @test web test.io', 40],
   ['<span class="k">zoza ›</span> understanding intent…', 18],
-  ['  name    : Liberty', 8],
-  ['  ticker  : $LBTY', 8],
-  ['  x       : @liberty', 8],
-  ['  website : liberty.io', 8],
+  ['  name    : Test', 8],
+  ['  ticker  : $TEST', 8],
+  ['  x       : @test', 8],
+  ['  website : test.io', 8],
   ['  tax     : 3% (2% creator · 1% protocol)', 8],
   ['  network : Robinhood Chain', 8],
   ['<span class="k">zoza ›</span> composing smart contract…', 18],
