@@ -25,6 +25,7 @@ export type LaunchedToken = {
   x: string | null;
   website: string | null;
   address: string;
+  curve?: string;
   creator: string;
   tx: string;
   createdAt: number;
@@ -134,8 +135,6 @@ export function parseAnswer(field: Field, text: string): Draft {
 export const nextMissing = (d: Draft) => FIELDS.find((f) => !(f in d));
 
 export const shortAddr = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
-export const randHex = (n: number) =>
-  Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
 export const fmt = (n: number) => n.toLocaleString("en-US");
 
 export function timeAgo(ts: number) {

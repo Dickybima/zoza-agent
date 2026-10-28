@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon, CopyIcon, GlobeIcon, SearchIcon } from "lucide-react";
+import { ArrowRightIcon, ArrowUpRightIcon, CopyIcon, GlobeIcon, SearchIcon } from "lucide-react";
 
 import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
 import type { LaunchedToken } from "@/lib/agent";
+import { explorerToken } from "@/lib/chain";
 import { useTokens } from "@/lib/tokens";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export function Explore() {
         </div>
       )}
 
-      <p className="mt-10 text-center text-xs text-muted-foreground">{"// demo mode — launches are simulated and stored in this browser"}</p>
+      <p className="mt-10 text-center text-xs text-muted-foreground">{"// tokens launched through Zoza in this browser · live on Robinhood Chain"}</p>
     </Section>
   );
 }
@@ -155,6 +156,11 @@ function TokenCard({ t, fresh }: { t: LaunchedToken; fresh: boolean }) {
             </a>
           </Button>
         ) : null}
+        <Button variant="outline" size="sm" asChild>
+          <a href={explorerToken(t.address)} target="_blank" rel="noopener noreferrer">
+            Explorer <ArrowUpRightIcon />
+          </a>
+        </Button>
         <Button variant="outline" size="sm" onClick={copy}>
           <CopyIcon /> {copied ? "Copied ✓" : "Copy contract"}
         </Button>

@@ -9,11 +9,11 @@ const FAQ = [
   { q: "Do I need to know how to code?", a: "Not at all. You bring the vision; Zoza handles the contract architecture, security, and launch." },
   {
     q: "Who owns the tokens I create?",
-    a: "You do, entirely. Contracts are deployed directly from your wallet, so ownership and the full supply remain under your control.",
+    a: "You launch it from your own wallet and you are recorded as its creator, so the creator tax is paid straight to you. The full supply goes into a bonding curve that graduates into a permanently locked liquidity pool — nobody, Zoza included, can pull that liquidity.",
   },
   {
     q: "What about fees and taxes?",
-    a: "Launching only requires Robinhood Chain gas. Every token carries a fixed 3% tax on buys and sells: 2% flows directly to the token creator’s wallet, and 1% is a protocol fee that sustains Zoza’s infrastructure.",
+    a: "Launching costs the launchpad’s launch fee plus Robinhood Chain gas — both are shown in your wallet before you confirm. Every token carries a 3% tax on buys and sells: 2% flows directly to the token creator’s wallet, and 1% is the launchpad’s protocol fee.",
   },
   {
     q: "How secure is Zoza?",

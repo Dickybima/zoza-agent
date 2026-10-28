@@ -33,8 +33,17 @@ brand/               logo and X (Twitter) profile/header images
 
 shadcn is configured in `components.json` (aliases `@/components/ui`, `@/lib/utils`). New primitives can be added with `npx shadcn@latest add <component>` and will land in `components/ui/`.
 
-## Agent demo
+## Agent and on-chain launches
 
-The /agent page uses the MorphOrb component: type into the pill, the orb thinks, and Zoza's reply unfolds as a card (press Reply to answer). Give Zoza a name, ticker, X account, and website (e.g. `token Liberty ticker LBTY x @liberty web liberty.io`); X and website can be skipped. Every token carries a fixed 3% buy & sell tax: 2% to the creator's wallet, 1% protocol fee. Launches are simulated — no on-chain transactions are sent — and appear in **Explore** automatically.
+The /agent page uses the MorphOrb component: type into the pill (e.g. `name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz`), the orb thinks, and Zoza's reply unfolds as a card. X and website can be skipped.
 
-In production, the Explore feed and stats would be read from the launch contract's events on Robinhood Chain instead of browser storage.
+Once the blueprint is complete, **Launch** sends a real transaction from the connected wallet:
+
+1. the wallet is switched to **Robinhood Chain** (chain ID 4663, added if missing);
+2. launch terms are read from the Pons V2 launch factory `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` (`canLaunch`, `launchFee`, `maxCreatorTaxBps`, the first enabled launch config, and `previewLaunchEconomics` to pin the quoted terms);
+3. `launchToken` is simulated, then sent for the user to confirm in their wallet, paying `launchFee` — the creator tax is 2% (`creatorTaxBps = 200`) paid to the creator's wallet;
+4. the `TokenLaunched` event gives the token address, the token is added to **Explore** and the user is taken there.
+
+See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `contractsV2/src/v2/PonsV2LaunchFactory.sol`) and `lib/chain.ts` (RPC, explorer). Verify the factory address on the explorer before relying on it.
+
+The Explore feed lists tokens launched through Zoza from the current browser (localStorage). A feed shared by every visitor would index `TokenLaunched` events from the factory.

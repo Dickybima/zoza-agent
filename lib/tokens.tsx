@@ -4,11 +4,12 @@ import { useSyncExternalStore } from "react";
 
 import type { LaunchedToken } from "@/lib/agent";
 
-// Every token launched through the agent is published to Explore.
-// The demo keeps the feed in localStorage (with an in-memory fallback);
-// in production this would be read from the launch contract's events on
-// Robinhood Chain.
-const STORE_KEY = "zoza.tokens.v1";
+// Every token launched through the agent is published to Explore. The feed
+// lives in this browser's localStorage (with an in-memory fallback); a feed
+// shared by every visitor would index the launch factory's TokenLaunched
+// events on Robinhood Chain. v2: real on-chain launches only (v1 held the
+// earlier simulated ones).
+const STORE_KEY = "zoza.tokens.v2";
 const EMPTY: LaunchedToken[] = [];
 
 let memory = "[]";

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRightIcon, RocketIcon } from "lucide-react";
 
 import {
@@ -16,17 +17,19 @@ import {
   nextMissing,
   parseAnswer,
   parsePrompt,
-  randHex,
   shortAddr,
 } from "@/lib/agent";
 import type { Draft, Field } from "@/lib/agent";
+import { explorerTx } from "@/lib/chain";
+import { launchToken } from "@/lib/launchpad";
+import type { LaunchError, LaunchResult } from "@/lib/launchpad";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import MorphOrb from "@/components/ui/ai-thiking-orb-and-input";
 
-type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean };
+type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean; tx?: string };
 type Turn = { you: string; zoza: string };
 
 // Replies render inside the orb's answer card, so they stay short plain text.
@@ -43,8 +46,6 @@ const EXAMPLES = [
   "token ZetaCoin ticker ZETA x x.com/zetacoin website zetacoin.io",
   "token Liberty",
 ];
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Types `text` into the orb's input (only while it is idle and editable). */
 function fillPrompt(text: string) {
@@ -87,13 +88,15 @@ function useOrbPhase() {
 }
 
 export function AgentConsole() {
-  const { address, connect, confirmLaunch } = useWallet();
+  const { address, connect, getProvider } = useWallet();
+  const router = useRouter();
   const { publish } = useTokens();
   const phase = useOrbPhase();
   const [blueprint, setBlueprint] = useState<Blueprint | null>(null);
   const [log, setLog] = useState<Turn[]>([]);
   const [ready, setReady] = useState(false);
   const [launching, setLaunching] = useState(false);
+  const [goExplore, setGoExplore] = useState(false);
   const draftRef = useRef<Draft | null>(null);
   const askingRef = useRef<Field | null>(null);
   const readyRef = useRef(false);
@@ -123,52 +126,43 @@ export function AgentConsole() {
   const deploy = async (): Promise<string> => {
     const tok = draftRef.current!;
     const wallet = address ?? (await connect());
-    if (!wallet) return "No wallet connected, so nothing was launched. Press Launch to try again.";
+    const provider = getProvider();
+    if (!wallet || !provider) return "No wallet connected, so nothing was launched. Press Launch to try again.";
 
-    render(tok, "waiting for wallet confirmation");
-    const approved = await confirmLaunch({
-      title: `Launch ${tok.name} ($${tok.ticker})`,
-      lines: [
-        ["network", NETWORK],
-        ["supply", fmt(SUPPLY)],
-        ["tax", `${TAX}% buy & sell`],
-        ["creator fee", `${CREATOR_FEE}% → ${shortAddr(wallet)}`],
-        ["protocol fee", `${PROTOCOL_FEE}%`],
-        ...(tok.x ? [["x", "@" + tok.x] as [string, string]] : []),
-        ...(tok.website ? [["website", tok.website] as [string, string]] : []),
-      ],
-    });
-    if (!approved) {
-      render(tok, "rejected in wallet");
-      return "Launch cancelled in your wallet. Press Launch to try again.";
+    let result: LaunchResult;
+    const sentAt = performance.now();
+    try {
+      result = await launchToken(
+        provider,
+        wallet,
+        { name: tok.name!, ticker: tok.ticker!, x: tok.x ?? null, website: tok.website ?? null, creatorTaxBps: CREATOR_FEE * 100 },
+        (status) => render(tok, status),
+      );
+    } catch (err) {
+      const e = err as LaunchError;
+      render(tok, e.rejected ? "rejected in wallet" : "launch failed");
+      return e.rejected
+        ? "Launch cancelled in your wallet. Press Launch to try again."
+        : `Launch failed: ${e.message} Press Launch to try again.`;
     }
+
     draftRef.current = null;
     markReady(false);
-
-    const startedAt = performance.now();
-    for (const s of [
-      "composing contract from audited architecture",
-      `routing ${CREATOR_FEE}% creator fee to ${shortAddr(wallet)}`,
-      "embedding X and website metadata",
-      `broadcasting to ${NETWORK}`,
-    ]) {
-      render(tok, s);
-      await sleep(650);
-    }
-    const addr = "0x" + randHex(40);
-    setBlueprint({ tok: { ...tok, address: addr }, status: `LIVE on ${NETWORK} (demo)`, live: true });
+    setBlueprint({ tok: { ...tok, address: result.token }, status: `LIVE on ${NETWORK}`, live: true, tx: result.hash });
     publish({
       name: tok.name!,
       ticker: tok.ticker!,
       x: tok.x ?? null,
       website: tok.website ?? null,
-      address: addr,
+      address: result.token,
+      curve: result.curve,
       creator: wallet,
-      tx: "0x" + randHex(64),
+      tx: result.hash,
       createdAt: Date.now(),
-      launchSeconds: Math.round((performance.now() - startedAt) / 100) / 10,
+      launchSeconds: Math.round((performance.now() - sentAt) / 100) / 10,
     });
-    return `${tok.name} ($${tok.ticker}) is live on ${NETWORK} (demo). Contract ${shortAddr(addr)}. ${CREATOR_FEE}% of every trade now flows to ${shortAddr(wallet)}.`;
+    setGoExplore(true); // redirect once the orb has shown the result
+    return `${tok.name} ($${tok.ticker}) is live on ${NETWORK}. Contract ${shortAddr(result.token)}. ${CREATOR_FEE}% of every trade flows to ${shortAddr(wallet)}. Opening Explore…`;
   };
 
   const reply = async (text: string): Promise<string> => {
@@ -217,6 +211,13 @@ export function AgentConsole() {
     setLog((l) => [...l, { you: text, zoza: answer }]);
     return answer;
   };
+
+  // after a launch, let the creator read the orb's result, then open Explore
+  useEffect(() => {
+    if (!goExplore || phase !== "answered") return;
+    const t = setTimeout(() => router.push("/explore"), 2500);
+    return () => clearTimeout(t);
+  }, [goExplore, phase, router]);
 
   // Launch button: replays "launch" through the orb so the same flow runs
   // (wallet picker if needed → wallet confirmation → deploy), with animation.
@@ -329,7 +330,8 @@ function IntroPanel() {
       </ul>
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
         Commands: <span className="text-foreground">launch</span>, <span className="text-foreground">cancel</span>,{" "}
-        <span className="text-foreground">skip</span>. Demo mode — no real transactions.
+        <span className="text-foreground">skip</span>. Launching sends a real transaction on {NETWORK}: you pay the
+        launch fee and gas shown in your wallet.
       </p>
     </div>
   );
@@ -418,9 +420,16 @@ function BlueprintPanel({
           </Button>
         ) : null}
         {bp.live ? (
-          <Link href="/explore" className="mt-3 flex items-center gap-1.5 text-xs text-foreground hover:text-signal">
-            View in Explore <ArrowRightIcon className="size-3.5" />
-          </Link>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <Link href="/explore" className="flex items-center gap-1.5 text-foreground hover:text-signal">
+              View in Explore <ArrowRightIcon className="size-3.5" />
+            </Link>
+            {bp.tx ? (
+              <a href={explorerTx(bp.tx)} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                View transaction ↗
+              </a>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
