@@ -43,6 +43,10 @@ export function TokenAvatar({
           src={src!}
           alt={`${label} logo`}
           className={cn("absolute inset-0 size-full object-cover transition-opacity", state === "ok" ? "opacity-100" : "opacity-0")}
+          // an image that finished loading before hydration fires no load event
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth > 0 && state === "loading") setState("ok");
+          }}
           onLoad={() => setState("ok")}
           onError={() => setState("error")}
         />
