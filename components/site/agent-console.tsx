@@ -43,10 +43,10 @@ const QUESTIONS: Record<Field, string> = {
 };
 
 const EXAMPLES = [
-  "name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz",
-  "token Moon Cat ticker MEOW x @mooncat web mooncat.xyz",
-  "token ZetaCoin ticker ZETA x x.com/zetacoin website zetacoin.io",
-  "token Liberty",
+  "name: Test ticker: TEST x: @test website: test.xyz",
+  "token Test ticker TEST x @test web test.xyz",
+  "token Test ticker TEST x x.com/test website test.io",
+  "token Test",
 ];
 
 /** Types `text` into the orb's input (only while it is idle and editable). */
@@ -212,7 +212,7 @@ export function AgentConsole() {
       if (!Object.keys(a).length) return `That doesn’t look quite right. ${QUESTIONS[askingRef.current]}`;
       Object.assign(draft, a);
     } else {
-      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Press Launch when you’re ready.";
+      return "To refine a detail, try name Test, ticker TEST, x @test or web test.xyz. Press Launch when you’re ready.";
     }
 
     markReady(false);
@@ -336,10 +336,10 @@ function IntroPanel() {
       </p>
       <p className="mt-6 mb-2 text-xs text-muted-foreground">{"// format"}</p>
       <pre className="border border-border bg-background/70 px-3 py-2 text-xs leading-relaxed backdrop-blur-sm">
-        <span className="text-muted-foreground">name:</span> Moon Cat{"\n"}
-        <span className="text-muted-foreground">ticker:</span> MEOW{"\n"}
-        <span className="text-muted-foreground">x:</span> @mooncat{"\n"}
-        <span className="text-muted-foreground">website:</span> mooncat.xyz
+        <span className="text-muted-foreground">name:</span> Test{"\n"}
+        <span className="text-muted-foreground">ticker:</span> TEST{"\n"}
+        <span className="text-muted-foreground">x:</span> @test{"\n"}
+        <span className="text-muted-foreground">website:</span> test.xyz
       </pre>
       <p className="mt-6 mb-2 text-xs text-muted-foreground">{"// try one"}</p>
       <ul className="grid gap-2">
