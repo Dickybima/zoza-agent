@@ -5,15 +5,18 @@ import { ArrowDownIcon, ArrowRightIcon } from "lucide-react";
 
 import { VanishRun } from "@/components/ui/hero-ascii-tunnel";
 import { Button } from "@/components/ui/button";
+import { ScrambleText } from "@/components/ui/scramble-text";
 
 export function Hero() {
   return (
     <div className="relative">
       <VanishRun className="text-foreground">
         <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-[2.75rem]">
-          Say the word.
+          <ScrambleText text="Say the word." />
           <br />
-          <span className="text-signal">It’s on-chain.</span>
+          <span className="text-signal">
+            <ScrambleText text="It’s on-chain." delay={350} />
+          </span>
         </h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
           A name, a ticker, a link to your world. Zoza writes the contract, wires your 2% creator

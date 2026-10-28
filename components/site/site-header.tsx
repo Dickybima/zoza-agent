@@ -7,6 +7,7 @@ import { CopyIcon, LogOutIcon, MenuIcon, RefreshCwIcon, WalletIcon, XIcon } from
 
 import { shortAddr } from "@/lib/agent";
 import { PAGES, isActive } from "@/lib/nav";
+import { LiveTicker } from "@/components/site/live-ticker";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export function SiteHeader() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/75 backdrop-blur-md">
+      <LiveTicker />
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
         <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2.5 font-semibold tracking-[0.2em]">
           <Logo className="size-7" />

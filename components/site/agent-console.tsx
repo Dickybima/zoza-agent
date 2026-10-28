@@ -294,7 +294,7 @@ export function AgentConsole() {
       </div>
 
       {/* compact title on small screens, where the panels stack below the stage */}
-      <div className="pointer-events-none absolute inset-x-0 top-20 px-4 text-center sm:px-6 xl:hidden">
+      <div className="pointer-events-none absolute inset-x-0 top-24 px-4 text-center sm:px-6 xl:hidden">
         <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
           <span className="text-signal">[ 03 ]</span> The lab
         </p>
@@ -303,7 +303,7 @@ export function AgentConsole() {
       </div>
 
       {/* side panels: float beside the stage on wide screens, stack below it otherwise */}
-      <div className="pointer-events-none mx-auto grid max-w-6xl gap-6 px-4 pb-16 sm:px-6 xl:absolute xl:inset-x-0 xl:top-20 xl:max-w-none xl:grid-cols-[19rem_1fr_21rem] xl:pb-0">
+      <div className="pointer-events-none mx-auto grid max-w-6xl gap-6 px-4 pb-16 sm:px-6 xl:absolute xl:inset-x-0 xl:top-24 xl:max-w-none xl:grid-cols-[19rem_1fr_21rem] xl:pb-0">
         <IntroPanel />
         <div className="hidden xl:block" />
         <div className="pointer-events-auto grid content-start gap-4">

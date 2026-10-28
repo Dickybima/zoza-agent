@@ -10,7 +10,8 @@ export function fmtPrice(p: number): string {
   if (!Number.isFinite(p) || p <= 0) return "0";
   if (p >= 1) return p.toLocaleString("en-US", { maximumFractionDigits: 4 });
   if (p >= 0.0001) return p.toPrecision(4).replace(/0+$/, "");
-  const zeros = Math.floor(-Math.log10(p)) - 1;
+  // zeros between the decimal point and the first significant digit
+  const zeros = -Math.floor(Math.log10(p)) - 1;
   const digits = Math.round(p * 10 ** (zeros + 4)).toString().slice(0, 4).replace(/0+$/, "");
   return `0.0${String(zeros).split("").map((d) => SUBSCRIPT[+d]).join("")}${digits}`;
 }

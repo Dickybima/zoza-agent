@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { PriceChart } from "@/components/site/price-chart";
 import type { PricePoint } from "@/components/site/price-chart";
 import { TokenAvatar } from "@/components/site/token-avatar";
+import { OFFICIAL_ADDRESS } from "@/lib/official";
 
 const INTERVALS = [
   { label: "1m", sec: 60 },
@@ -135,7 +136,8 @@ export function TokenView() {
   const price = spotPrice(curve);
   const mcap = price * Number(formatEther(info.totalSupply));
   const progress = curve.threshold > BigInt(0) ? Math.min(1, Number(formatEther(curve.realQuote)) / Number(formatEther(curve.threshold))) : 0;
-  const logo = info.logo || local?.logo;
+  // the official token falls back to the Zoza mark until it has on-chain artwork
+  const logo = info.logo || local?.logo || (info.address.toLowerCase() === OFFICIAL_ADDRESS.toLowerCase() ? "/icon.svg" : undefined);
   const lastTrade = trades[trades.length - 1];
   const firstPrice = trades[0]?.price;
   const change = firstPrice && lastTrade ? (lastTrade.price / firstPrice - 1) * 100 : 0;

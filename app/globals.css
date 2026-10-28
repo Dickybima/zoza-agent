@@ -643,3 +643,18 @@
 [data-launch-ready] .mo-reset {
   translate: calc(-100% - 6px) 0;
 }
+
+/* live ticker: two identical runs slide left by one run's width, forever */
+.ticker-track {
+  animation: ticker 48s linear infinite;
+}
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
