@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { FormEvent, ReactNode } from "react";
 import { ArrowRightIcon, CornerDownLeftIcon } from "lucide-react";
 
@@ -198,9 +199,9 @@ export function AgentConsole() {
         the protocol.
         <div className="mt-3">
           <Button size="sm" variant="outline" asChild>
-            <a href="#explore">
+            <Link href="/explore">
               View in Explore <ArrowRightIcon />
-            </a>
+            </Link>
           </Button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">*This is a simulation — the address and hash above are not real transactions.</p>

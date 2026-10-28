@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ArrowDownIcon, ArrowRightIcon } from "lucide-react";
 
 import { VanishRun } from "@/components/ui/hero-ascii-tunnel";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 export function Hero() {
   return (
-    <div id="top" className="relative">
+    <div className="relative">
       <VanishRun className="text-foreground">
         <Badge variant="outline" className="bg-background/80 backdrop-blur-sm">
           <span className="size-1.5 animate-pulse rounded-full bg-signal" />
@@ -25,12 +26,12 @@ export function Hero() {
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <Button asChild>
-            <a href="#agent">
+            <Link href="/agent">
               Start creating <ArrowRightIcon />
-            </a>
+            </Link>
           </Button>
           <Button variant="outline" asChild>
-            <a href="#explore">Explore tokens</a>
+            <Link href="/explore">Explore tokens</Link>
           </Button>
         </div>
       </VanishRun>

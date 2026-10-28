@@ -13,18 +13,21 @@ npm run build    # static export to out/
 npm run lint
 ```
 
-`next.config.ts` uses `output: "export"`, so `out/` is a plain static site that deploys as-is to GitHub Pages, Vercel, Netlify, or any static host.
+`next.config.ts` uses `output: "export"` with `trailingSlash` (each menu page is emitted as `out/<page>/index.html`), so `out/` is a plain static site that deploys as-is to GitHub Pages, Vercel, Netlify, or any static host.
 
 ## Project structure
 
 ```
-app/                 layout (fonts, theme script, providers), page, globals.css (theme tokens), icon.svg
+app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
+app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, roadmap, faq
 components/ui/       shadcn-style primitives + hero-ascii-tunnel.tsx
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
 lib/agent.ts         prompt parsing, fees, formatting
 lib/tokens.tsx       Explore feed store (localStorage in the demo)
 lib/wallet.tsx       wallet picker (EIP-6963) + connect() flow
+lib/nav.ts           menu pages (header, mobile menu, home index)
 brand/               logo and X (Twitter) profile/header images
 ```
 

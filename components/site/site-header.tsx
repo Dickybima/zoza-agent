@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CopyIcon, LogOutIcon, MenuIcon, RefreshCwIcon, WalletIcon, XIcon } from "lucide-react";
 
 import { shortAddr } from "@/lib/agent";
+import { PAGES, isActive } from "@/lib/nav";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
@@ -19,37 +22,39 @@ import {
 import { Logo } from "@/components/site/logo";
 import { ThemeToggle } from "@/components/site/theme-toggle";
 
-const LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#agent", label: "Agent" },
-  { href: "#explore", label: "Explore" },
-  { href: "#network", label: "Network" },
-  { href: "#roadmap", label: "Roadmap" },
-  { href: "#faq", label: "FAQ" },
-];
-
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const { tokens } = useTokens();
+  const pathname = usePathname();
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/75 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <a href="#top" className="flex items-center gap-2.5 font-semibold tracking-[0.2em]">
+        <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2.5 font-semibold tracking-[0.2em]">
           <Logo className="size-7" />
           ZOZA
-        </a>
+        </Link>
 
         <nav className="ml-6 hidden items-center gap-1 text-[13px] text-muted-foreground lg:flex">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="rounded-sm px-2.5 py-1.5 transition-colors hover:bg-accent hover:text-foreground">
-              {l.label}
-              {l.href === "#explore" && tokens.length > 0 ? (
-                <span className="ml-1.5 text-signal">[{tokens.length}]</span>
-              ) : null}
-            </a>
-          ))}
+          {PAGES.map((l) => {
+            const active = isActive(pathname, l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative rounded-sm px-2.5 py-1.5 transition-colors hover:bg-accent hover:text-foreground",
+                  active && "text-foreground after:absolute after:inset-x-2.5 after:-bottom-[13px] after:h-px after:bg-signal",
+                )}
+              >
+                {l.label}
+                {l.href === "/explore" && tokens.length > 0 ? (
+                  <span className="ml-1.5 text-signal">[{tokens.length}]</span>
+                ) : null}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5">
@@ -69,18 +74,25 @@ export function SiteHeader() {
       </div>
 
       <nav className={cn("border-t border-border bg-background lg:hidden", open ? "block" : "hidden")}>
-        {LINKS.map((l, i) => (
-          <a
-            key={l.href}
-            href={l.href}
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 border-b border-dashed border-border px-6 py-3.5 text-sm last:border-b-0 hover:bg-accent"
-          >
-            <span className="text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
-            {l.label}
-            {l.href === "#explore" && tokens.length > 0 ? <span className="text-signal">[{tokens.length}]</span> : null}
-          </a>
-        ))}
+        {PAGES.map((l) => {
+          const active = isActive(pathname, l.href);
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-3 border-b border-dashed border-border px-6 py-3.5 text-sm last:border-b-0 hover:bg-accent",
+                active && "bg-accent",
+              )}
+            >
+              <span className={cn("text-xs", active ? "text-signal" : "text-muted-foreground")}>{active ? "›" : l.index}</span>
+              {l.label}
+              {l.href === "/explore" && tokens.length > 0 ? <span className="text-signal">[{tokens.length}]</span> : null}
+            </Link>
+          );
+        })}
       </nav>
     </header>
   );

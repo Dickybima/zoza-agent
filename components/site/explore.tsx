@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowRightIcon, CopyIcon, GlobeIcon, SearchIcon } from "lucide-react";
 
 import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
@@ -70,9 +71,9 @@ export function Explore() {
         <EmptyState>
           <p>No tokens yet. The first launch through Zoza will appear here.</p>
           <Button asChild className="mt-6">
-            <a href="#agent">
+            <Link href="/agent">
               Launch the first one <ArrowRightIcon />
-            </a>
+            </Link>
           </Button>
         </EmptyState>
       ) : list.length === 0 ? (

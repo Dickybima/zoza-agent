@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ const FIELD = Array.from({ length: 9 }, (_, r) =>
 
 export function Cta() {
   return (
-    <Section>
+    <Section bordered>
       <div className="relative overflow-hidden border border-border bg-card/50 px-6 py-16 text-center sm:py-20">
         <pre aria-hidden className="pointer-events-none absolute inset-0 select-none overflow-hidden text-[11px] leading-[1.6] text-muted-foreground/25">
           {FIELD}
@@ -30,9 +31,9 @@ export function Cta() {
             Join a new generation of creators building the on-chain future with Zoza on Robinhood Chain.
           </p>
           <Button asChild size="lg" className="mt-8">
-            <a href="#agent">
+            <Link href="/agent">
               Start creating <ArrowRightIcon />
-            </a>
+            </Link>
           </Button>
         </div>
       </div>
