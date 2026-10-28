@@ -10,9 +10,7 @@ import {
   createWalletClient,
   custom,
   decodeEventLog,
-  fallback,
   getAddress,
-  http,
   parseAbi,
   toHex,
   zeroAddress,
@@ -78,6 +76,61 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
+type RpcRequest = { method: string; params?: unknown };
+type RpcSource = { name: string; request: (req: RpcRequest) => Promise<unknown> };
+type RpcFailure = Error & { code?: number; data?: unknown };
+
+const rpcError = (e: { code?: number; message?: string; data?: unknown }): RpcFailure =>
+  Object.assign(new Error(e.message ?? "RPC error"), { code: e.code, data: e.data });
+
+/** A JSON-RPC endpoint reached over fetch. */
+function httpSource(name: string, url: string): RpcSource {
+  let id = 0;
+  return {
+    name,
+    async request({ method, params }) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params: params ?? [] }),
+      });
+      if (!res.ok && res.status !== 400) throw rpcError({ message: `${name}: HTTP ${res.status}` });
+      const json = await res.json();
+      if (json.error) throw rpcError(json.error);
+      return json.result;
+    },
+  };
+}
+
+/**
+ * Read transport that asks every source at once — Zoza's same-origin proxy,
+ * Robinhood Chain's public RPC and the wallet's own RPC — and takes the first
+ * answer, so one blocked, rate-limited or hanging endpoint cannot stall a
+ * launch. When every source fails, the most informative error wins (a revert
+ * carries data viem decodes into a readable reason).
+ */
+function racingReads(sources: RpcSource[], timeoutMs = 20_000) {
+  return custom(
+    {
+      async request(req: RpcRequest) {
+        const attempts = sources.map((s) =>
+          withTimeout(s.request(req), timeoutMs, `${s.name}: no response`).catch((err: RpcFailure) => {
+            throw Object.assign(err, { source: s.name });
+          }),
+        );
+        try {
+          return await Promise.any(attempts);
+        } catch (agg) {
+          const errors = ((agg as AggregateError).errors ?? []) as RpcFailure[];
+          console.warn(`[zoza] ${req.method} failed on every RPC source`, errors);
+          throw errors.find((e) => e.data || /revert/i.test(e.message)) ?? errors[0] ?? agg;
+        }
+      },
+    },
+    { retryCount: 1 },
+  );
+}
+
 const WRONG_NETWORK =
   "Your wallet is not on Robinhood Chain. Switch it to Robinhood Chain (chain ID 4663) — or use a wallet that supports custom networks, such as MetaMask or Rabby — then press Launch again.";
 
@@ -120,6 +173,9 @@ function explain(err: unknown): LaunchError {
     if (err.walk((e) => e instanceof UserRejectedRequestError)) {
       return new LaunchError("Transaction rejected in your wallet.", true);
     }
+    if (/unknown RPC error|HTTP request failed|took too long/i.test(err.shortMessage)) {
+      return new LaunchError("Couldn’t reach Robinhood Chain from your browser or your wallet. Check your connection, then press Launch again.");
+    }
     return new LaunchError(err.shortMessage);
   }
   if ((err as { code?: number })?.code === 4001) return new LaunchError("Request rejected in your wallet.", true);
@@ -144,14 +200,14 @@ export async function launchToken(
     // the switch may wait on a wallet prompt, so allow time for the user
     await withTimeout(ensureChain(provider), 90_000, WRONG_NETWORK);
 
-    // Reads go straight to Robinhood Chain's public RPC; if the browser cannot
-    // reach it, they fall back to the wallet's own RPC. Only the launch
+    // Reads race the proxy, the public RPC and the wallet; only the launch
     // transaction itself needs the wallet.
-    const readTransport = fallback([
-      http(RPC_URL, { timeout: 15_000, retryCount: 1 }),
-      custom(provider, { retryCount: 0 }),
+    const readTransport = racingReads([
+      httpSource("zoza-proxy", "/api/rpc"),
+      httpSource("public-rpc", RPC_URL),
+      { name: "wallet", request: (req) => provider.request(req as Parameters<EIP1193Provider["request"]>[0]) },
     ]);
-    const publicClient = createPublicClient({ chain: robinhoodChain, transport: readTransport });
+    const publicClient = createPublicClient({ chain: robinhoodChain, transport: readTransport, pollingInterval: 2_000 });
     const walletClient = createWalletClient({ chain: robinhoodChain, transport: custom(provider), account });
     const factory = { address: LAUNCH_FACTORY, abi: launchFactoryAbi } as const;
     const NO_RPC = "Robinhood Chain did not respond. Check your connection and press Launch to try again.";
