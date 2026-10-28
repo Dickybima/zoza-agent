@@ -28,3 +28,13 @@ export function fmtTokens(amount: bigint): string {
   const n = Number(formatEther(amount));
   return n.toLocaleString("en-US", { notation: n >= 10_000 ? "compact" : "standard", maximumFractionDigits: 2 });
 }
+
+/** USD price that can be tiny: $0.0₅123, $0.42, $1,234.56. */
+export const fmtUsdPrice = (usd: number) => `$${usd >= 0.01 ? usd.toLocaleString("en-US", { maximumFractionDigits: usd >= 1 ? 2 : 4 }) : fmtPrice(usd)}`;
+
+/** USD amount: $12.34, $1.2K, $3.4M. */
+export function fmtUsd(usd: number): string {
+  if (!Number.isFinite(usd)) return "$0";
+  if (usd > 0 && usd < 0.01) return "<$0.01";
+  return `$${usd.toLocaleString("en-US", { notation: usd >= 100_000 ? "compact" : "standard", maximumFractionDigits: 2 })}`;
+}

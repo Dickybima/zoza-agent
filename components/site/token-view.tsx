@@ -11,7 +11,8 @@ import { shortAddr, timeAgo } from "@/lib/agent";
 import { explorerToken, explorerTx, EXPLORER } from "@/lib/chain";
 import { fetchCurve, fetchTokenInfo, fetchTrades, findLaunchBlock, minOut, quoteBuy, quoteSell, spotPrice, trade, launchedTokenAbi } from "@/lib/curve";
 import type { CurveState, TokenInfo, Trade } from "@/lib/curve";
-import { fmtEth, fmtPrice, fmtTokens } from "@/lib/format";
+import { fmtEth, fmtPrice, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
+import { useEthUsd } from "@/hooks/use-eth-usd";
 import { readClient } from "@/lib/rpc";
 import type { ChainError } from "@/lib/rpc";
 import { useTokens } from "@/lib/tokens";
@@ -20,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PriceChart } from "@/components/site/price-chart";
-import type { Candle } from "@/components/site/price-chart";
+import type { PricePoint } from "@/components/site/price-chart";
 import { TokenAvatar } from "@/components/site/token-avatar";
 
 const INTERVALS = [
@@ -32,21 +33,16 @@ const INTERVALS = [
 const POLL_MS = 8_000;
 const FALLBACK_LOOKBACK = BigInt(200_000);
 
-/** OHLC buckets from trades; each candle opens at the previous close. */
-function buildCandles(trades: Trade[], sec: number): Candle[] {
-  const out: Candle[] = [];
+/** Closing price per time bucket, scaled by `rate` (ETH → USD). */
+function buildLine(trades: Trade[], sec: number, rate: number): PricePoint[] {
+  const out: PricePoint[] = [];
   for (const t of trades) {
     if (!t.time || !t.price) continue;
-    const time = (Math.floor(t.time / sec) * sec) as Candle["time"];
+    const time = (Math.floor(t.time / sec) * sec) as PricePoint["time"];
+    const value = t.price * rate;
     const last = out[out.length - 1];
-    if (last && last.time === time) {
-      last.high = Math.max(last.high, t.price);
-      last.low = Math.min(last.low, t.price);
-      last.close = t.price;
-    } else {
-      const open = last ? last.close : t.price;
-      out.push({ time, open, high: Math.max(open, t.price), low: Math.min(open, t.price), close: t.price });
-    }
+    if (last && last.time === time) last.value = value;
+    else out.push({ time, value });
   }
   return out;
 }
@@ -117,7 +113,13 @@ export function TokenView() {
     return () => clearInterval(id);
   }, [data, refresh]);
 
-  const candles = useMemo(() => buildCandles(data?.trades ?? [], interval), [data?.trades, interval]);
+  // USD when the ETH price is known; ETH until then
+  const ethUsd = useEthUsd();
+  const rate = ethUsd ?? 1;
+  const usd = ethUsd !== null;
+  const fmtP = useCallback((v: number) => (usd ? fmtUsdPrice(v) : `${fmtPrice(v)} ETH`), [usd]);
+  const fmtV = (eth: number) => (usd ? fmtUsd(eth * rate) : `${fmtPrice(eth)} ETH`);
+  const points = useMemo(() => buildLine(data?.trades ?? [], interval, rate), [data?.trades, interval, rate]);
 
   if (!address) return <Notice title="Token not found" body="This link has no valid token address." />;
   if (error) return <Notice title="Couldn’t load token" body={error} />;
@@ -155,9 +157,9 @@ export function TokenView() {
           <p className="mt-1 text-sm text-muted-foreground">${info.symbol}</p>
         </div>
         <div className="w-full sm:w-auto sm:text-right">
-          <p className="text-2xl font-semibold tabular-nums">{fmtPrice(price)} <span className="text-sm text-muted-foreground">ETH</span></p>
+          <p className="text-2xl font-semibold tabular-nums">{fmtP(price * rate)}</p>
           <p className="text-xs text-muted-foreground">
-            mcap {fmtPrice(mcap)} ETH
+            mcap {fmtV(mcap)}
             {trades.length ? (
               <span className={cn("ml-2", change >= 0 ? "text-signal" : "text-destructive")}>
                 {change >= 0 ? "+" : ""}
@@ -174,7 +176,7 @@ export function TokenView() {
           {/* chart */}
           <div className="border border-border bg-card/50">
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-              <span>price · ETH</span>
+              <span>price · {usd ? "USD" : "ETH"}</span>
               <div className="flex gap-1">
                 {INTERVALS.map((i) => (
                   <button
@@ -189,8 +191,8 @@ export function TokenView() {
               </div>
             </div>
             <div className="relative h-[360px]">
-              <PriceChart candles={candles} />
-              {!candles.length ? (
+              <PriceChart points={points} format={fmtP} />
+              {!points.length ? (
                 <p className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-muted-foreground">
                   No trades yet — be the first to buy.
                 </p>
@@ -200,7 +202,7 @@ export function TokenView() {
 
           {/* stats */}
           <dl className="grid grid-cols-2 border border-border sm:grid-cols-4">
-            <Stat label="liquidity" value={`${fmtEth(curve.realQuote, 4)} ETH`} />
+            <Stat label="liquidity" value={fmtV(Number(formatEther(curve.realQuote)))} />
             <Stat label="trades" value={String(trades.length)} />
             <Stat label="base fee" value={`${Number(curve.feeBps) / 100}%`} />
             <Stat label="creator tax" value={`${Number(curve.taxBps) / 100}%`} />
@@ -209,7 +211,7 @@ export function TokenView() {
             <div className="mb-2 flex justify-between text-muted-foreground">
               <span>bonding curve → Uniswap v4</span>
               <span>
-                {fmtEth(curve.realQuote, 4)} / {fmtEth(curve.threshold, 4)} ETH
+                {fmtV(Number(formatEther(curve.realQuote)))} / {fmtV(Number(formatEther(curve.threshold)))}
               </span>
             </div>
             <p className="tracking-tight text-signal">
@@ -221,12 +223,12 @@ export function TokenView() {
         </div>
 
         <div className="space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <TradePanel info={info} curve={curve} onTraded={refresh} />
+          <TradePanel info={info} curve={curve} onTraded={refresh} ethUsd={ethUsd} />
           <InfoCard info={info} />
         </div>
 
         <div className="min-w-0 lg:col-start-1 lg:row-start-2">
-          <TradesTable trades={trades} symbol={info.symbol} />
+          <TradesTable trades={trades} symbol={info.symbol} ethUsd={ethUsd} />
         </div>
       </div>
     </div>
@@ -258,7 +260,18 @@ const BUY_PRESETS = ["0.001", "0.01", "0.05", "0.1"];
 const SELL_PRESETS = [25, 50, 75, 100];
 const SLIPPAGES = [100, 500, 1000];
 
-function TradePanel({ info, curve, onTraded }: { info: TokenInfo; curve: CurveState; onTraded: () => Promise<void> }) {
+function TradePanel({
+  info,
+  curve,
+  onTraded,
+  ethUsd,
+}: {
+  info: TokenInfo;
+  curve: CurveState;
+  onTraded: () => Promise<void>;
+  ethUsd: number | null;
+}) {
+  const inUsd = (wei: bigint) => (ethUsd ? ` (${fmtUsd(Number(formatEther(wei)) * ethUsd)})` : "");
   const { address, connect, getProvider } = useWallet();
   const [tab, setTab] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -314,7 +327,7 @@ function TradePanel({ info, curve, onTraded }: { info: TokenInfo; curve: CurveSt
       const { hash } = await trade(provider, wallet, info.curve, info.address, order, setBusy);
       setResult({
         ok: true,
-        text: tab === "buy" ? `Bought ~${fmtTokens(expected)} $${info.symbol}.` : `Sold for ~${fmtEth(expected)} ETH.`,
+        text: tab === "buy" ? `Bought ~${fmtTokens(expected)} $${info.symbol}.` : `Sold for ~${fmtEth(expected)} ETH${inUsd(expected)}.`,
         tx: hash,
       });
       setAmount("");
@@ -370,7 +383,7 @@ function TradePanel({ info, curve, onTraded }: { info: TokenInfo; curve: CurveSt
             <span>{tab === "buy" ? "you pay" : "you sell"}</span>
             {balances ? (
               <span>
-                balance {tab === "buy" ? `${fmtEth(balances.eth, 4)} ETH` : `${fmtTokens(balances.tokens)} $${info.symbol}`}
+                balance {tab === "buy" ? `${fmtEth(balances.eth, 4)} ETH${inUsd(balances.eth)}` : `${fmtTokens(balances.tokens)} $${info.symbol}`}
               </span>
             ) : null}
           </div>
@@ -385,6 +398,9 @@ function TradePanel({ info, curve, onTraded }: { info: TokenInfo; curve: CurveSt
             />
             <span className="px-3 text-sm text-muted-foreground">{tab === "buy" ? "ETH" : `$${info.symbol}`}</span>
           </div>
+          {tab === "buy" && parsed && ethUsd ? (
+            <p className="mt-1 text-right text-xs text-muted-foreground">≈ {fmtUsd(Number(formatEther(parsed)) * ethUsd)}</p>
+          ) : null}
           <div className="mt-2 flex gap-1.5">
             {tab === "buy"
               ? BUY_PRESETS.map((p) => (
@@ -409,7 +425,9 @@ function TradePanel({ info, curve, onTraded }: { info: TokenInfo; curve: CurveSt
         <dl className="space-y-1.5 text-xs">
           <div className="flex justify-between">
             <dt className="text-muted-foreground">you receive ≈</dt>
-            <dd className="tabular-nums">{tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} ETH`}</dd>
+            <dd className="tabular-nums">
+              {tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} ETH${inUsd(expected)}`}
+            </dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="text-muted-foreground">slippage</dt>
@@ -521,7 +539,7 @@ function InfoCard({ info }: { info: TokenInfo }) {
 /** Only http(s) links from on-chain metadata are rendered as links. */
 const safeUrl = (href: string) => (/^https?:\/\//i.test(href) ? href : `https://${href.replace(/^[a-z]+:/i, "")}`);
 
-function TradesTable({ trades, symbol }: { trades: Trade[]; symbol: string }) {
+function TradesTable({ trades, symbol, ethUsd }: { trades: Trade[]; symbol: string; ethUsd: number | null }) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30_000);
@@ -538,7 +556,7 @@ function TradesTable({ trades, symbol }: { trades: Trade[]; symbol: string }) {
               <tr className="border-b border-dashed border-border">
                 <th className="px-4 py-2 font-normal">time</th>
                 <th className="px-4 py-2 font-normal">type</th>
-                <th className="px-4 py-2 text-right font-normal">ETH</th>
+                <th className="px-4 py-2 text-right font-normal">{ethUsd ? "USD" : "ETH"}</th>
                 <th className="px-4 py-2 text-right font-normal">${symbol}</th>
                 <th className="px-4 py-2 text-right font-normal">price</th>
                 <th className="px-4 py-2 font-normal">trader</th>
@@ -550,9 +568,11 @@ function TradesTable({ trades, symbol }: { trades: Trade[]; symbol: string }) {
                 <tr key={`${t.tx}-${t.logIndex}`} className="border-b border-dashed border-border last:border-b-0">
                   <td className="px-4 py-2 text-muted-foreground">{t.time ? timeAgo(t.time * 1000) : "—"}</td>
                   <td className={cn("px-4 py-2 font-semibold uppercase", t.kind === "buy" ? "text-signal" : "text-destructive")}>{t.kind}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{fmtEth(t.eth, 5)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {ethUsd ? fmtUsd(Number(formatEther(t.eth)) * ethUsd) : fmtEth(t.eth, 5)}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums">{fmtTokens(t.tokens)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{fmtPrice(t.price)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{ethUsd ? fmtUsdPrice(t.price * ethUsd) : fmtPrice(t.price)}</td>
                   <td className="px-4 py-2">
                     <a href={`${EXPLORER}/address/${t.trader}`} target="_blank" rel="noopener noreferrer" className="hover:text-signal">
                       {shortAddr(t.trader)}
