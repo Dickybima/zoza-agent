@@ -24,6 +24,7 @@
       <a href="#features">Features</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#agent">Try the Agent</a>
+      <a href="#explore">Explore <span class="nav-count" id="exploreCount" hidden></span></a>
       <a href="#network">Network</a>
       <a href="#roadmap">Roadmap</a>
       <a href="#faq">FAQ</a>
@@ -145,6 +146,27 @@
           </div>
         </aside>
       </div>
+    </section>
+
+    <!-- EXPLORE -->
+    <section id="explore" class="section">
+      <div class="section-head">
+        <span class="eyebrow">Explore</span>
+        <h2>Every token born through Zoza</h2>
+        <p class="muted">Tokens launched by the agent appear here automatically, the moment they go live.</p>
+      </div>
+
+      <div class="explore-bar">
+        <input id="exploreSearch" type="search" autocomplete="off" placeholder="Search by name, ticker, or contract" aria-label="Search tokens" />
+        <select id="exploreSort" aria-label="Sort tokens">
+          <option value="new">Newest first</option>
+          <option value="old">Oldest first</option>
+          <option value="az">Name A–Z</option>
+        </select>
+      </div>
+
+      <div class="explore-grid" id="exploreGrid"></div>
+      <p class="explore-note">Demo mode — launches are simulated and stored in this browser.</p>
     </section>
 
     <!-- NETWORK -->

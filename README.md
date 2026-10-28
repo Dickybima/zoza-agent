@@ -6,6 +6,7 @@ Landing page for **Zoza** — an AI agent that launches tokens on **Robinhood Ch
 
 - Hero with an animated agent terminal
 - Capabilities, how it works, network, roadmap, and FAQ sections
+- **Explore**: every token launched through the agent is published here automatically, with search and sorting. The demo stores launches in the browser (localStorage); in production the feed would be read from launch events on Robinhood Chain.
 - **Interactive agent demo**: just provide a name, ticker, X account, and website (e.g. `token Liberty ticker LBTY x @liberty web liberty.io`). X and website can be skipped. Every token carries a fixed 3% buy & sell tax: 2% to the creator's wallet, 1% protocol fee. Zoza builds a blueprint and simulates the launch.
 
 > The demo is a simulation — no on-chain transactions are sent.

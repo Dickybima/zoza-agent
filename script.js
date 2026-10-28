@@ -329,15 +329,116 @@ async function deploy() {
   tok.address = "0x" + randHex(40);
   const tx = "0x" + randHex(64);
   renderPreview(tok, "● LIVE on Robinhood Chain (demo)", true);
-  await botSay(
+  publishToExplore({ ...tok, creator: wallet, tx, createdAt: Date.now() });
+  const done = await botSay(
     `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.ticker)}) is officially live!<br>
      Contract: <code>${tok.address}</code><br>
      Tx: <code>${tx.slice(0, 18)}…</code><br>
      Of the ${TAX}% tax on every trade, ${CREATOR_FEE}% now flows to <code>${shortAddr(wallet)}</code> and ${PROTOCOL_FEE}% goes to the protocol.<br>
+     <div class="actions"><a class="btn btn-ghost" href="#explore">View in Explore →</a></div>
      <small class="muted">*This is a simulation — the address and hash above are not real transactions.</small>`,
     900
   );
+  done.querySelector('a[href="#explore"]').onclick = () => (exploreSearch.value = "", renderExplore(tok.address));
 }
+
+// ---------- Explore ----------
+// Every token launched through the agent is published here automatically.
+// The demo keeps the feed in localStorage; in production this would be
+// read from the launch contract's events on Robinhood Chain.
+const STORE_KEY = "zoza.tokens.v1";
+const exploreGrid = $("#exploreGrid");
+const exploreSearch = $("#exploreSearch");
+const exploreSort = $("#exploreSort");
+const exploreCount = $("#exploreCount");
+let freshAddress = null;
+
+function loadTokens() {
+  try {
+    const list = JSON.parse(localStorage.getItem(STORE_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+let tokens = loadTokens();
+
+function publishToExplore(tok) {
+  tokens.push(tok);
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(tokens));
+  } catch {}
+  renderExplore(tok.address);
+}
+
+function timeAgo(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return "just now";
+  const units = [["d", 86400], ["h", 3600], ["m", 60]];
+  for (const [u, n] of units) if (s >= n) return Math.floor(s / n) + u + " ago";
+}
+
+function tokenCard(t) {
+  const x = t.x ? `<a href="https://x.com/${encodeURIComponent(t.x)}" target="_blank" rel="noopener noreferrer">𝕏 @${escapeHtml(t.x)}</a>` : "";
+  const web = t.website ? `<a href="https://${encodeURI(t.website)}" target="_blank" rel="noopener noreferrer">🌐 Website</a>` : "";
+  return `
+    <article class="token-card ${t.address === freshAddress ? "fresh" : ""}" data-address="${t.address}">
+      ${t.address === freshAddress ? '<span class="badge">NEW</span>' : ""}
+      <div class="token-head">
+        <div class="token-logo" style="background:${colorFor(t.ticker + t.name)}">${escapeHtml(t.ticker.slice(0, 2))}</div>
+        <div style="min-width:0"><h3>${escapeHtml(t.name)}</h3><small>$${escapeHtml(t.ticker)}</small></div>
+      </div>
+      <dl class="token-meta">
+        <div><dt>Contract</dt><dd>${shortAddr(t.address)}</dd></div>
+        <div><dt>Creator</dt><dd>${shortAddr(t.creator)}</dd></div>
+        <div><dt>Tax</dt><dd>${TAX}% · ${CREATOR_FEE}% creator</dd></div>
+        <div><dt>Launched</dt><dd>${timeAgo(t.createdAt)}</dd></div>
+      </dl>
+      <div class="token-links">${x}${web}<button type="button" data-copy="${t.address}">Copy contract</button></div>
+    </article>`;
+}
+
+function renderExplore(highlight) {
+  if (highlight) freshAddress = highlight;
+  const q = exploreSearch.value.trim().toLowerCase();
+  let list = tokens.filter((t) => !q || [t.name, t.ticker, t.address].some((v) => v.toLowerCase().includes(q)));
+  const sort = exploreSort.value;
+  list.sort((a, b) => (sort === "az" ? a.name.localeCompare(b.name) : sort === "old" ? a.createdAt - b.createdAt : b.createdAt - a.createdAt));
+
+  exploreCount.hidden = tokens.length === 0;
+  exploreCount.textContent = tokens.length;
+
+  if (!tokens.length) {
+    exploreGrid.innerHTML = `<div class="explore-empty"><p>No tokens yet. The first launch through Zoza will appear here.</p><a href="#agent" class="btn btn-primary">Launch the first one →</a></div>`;
+  } else if (!list.length) {
+    exploreGrid.innerHTML = `<div class="explore-empty"><p>No tokens match “${escapeHtml(q)}”.</p></div>`;
+  } else {
+    exploreGrid.innerHTML = list.map(tokenCard).join("");
+  }
+}
+
+exploreSearch.addEventListener("input", () => renderExplore());
+exploreSort.addEventListener("change", () => renderExplore());
+exploreGrid.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-copy]");
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copy);
+    btn.textContent = "Copied ✓";
+  } catch {
+    btn.textContent = btn.dataset.copy;
+  }
+  setTimeout(() => (btn.textContent = "Copy contract"), 1600);
+});
+// keep other open tabs in sync and refresh the "x ago" labels
+window.addEventListener("storage", (e) => {
+  if (e.key === STORE_KEY) {
+    tokens = loadTokens();
+    renderExplore();
+  }
+});
+setInterval(() => renderExplore(), 60_000);
+renderExplore();
 
 $("#chatForm").addEventListener("submit", (e) => {
   e.preventDefault();
