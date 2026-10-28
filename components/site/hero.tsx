@@ -4,17 +4,12 @@ import Link from "next/link";
 import { ArrowDownIcon, ArrowRightIcon } from "lucide-react";
 
 import { VanishRun } from "@/components/ui/hero-ascii-tunnel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export function Hero() {
   return (
     <div className="relative">
       <VanishRun className="text-foreground">
-        <Badge variant="outline" className="bg-background/80 backdrop-blur-sm">
-          <span className="size-1.5 animate-pulse rounded-full bg-signal" />
-          Robinhood Chain
-        </Badge>
         <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-[2.75rem]">
           Say the word.
           <br />
