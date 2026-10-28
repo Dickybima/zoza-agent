@@ -35,8 +35,19 @@ const SKIP = /^(skip|none|n\/a|na|no|not yet|-)$/i;
 const X_URL = /(?:https?:\/\/)?(?:www\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})\/?/i;
 const URL_RE = /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,]*)?)/i;
 
-export const CONFIRM = /^(yes|y|ok|okay|deploy|launch|confirm|go|let'?s go)$/;
-export const CANCEL = /^(cancel|stop|abort)\b/;
+// Launch intent: a launch verb anywhere ("deploy token", "yes, launch it!")
+// or a bare yes-word. Callers only treat it as a launch when the message
+// carries no token fields, so "launch a token named X" still starts a draft.
+const LAUNCH_VERB = /\b(launch|deploy|mint|confirm|go live|ship it)\b/;
+const YES = /^(yes|y|yep|yeah|ok|okay|sure|go|let'?s go|do it)( please)?$/;
+const CANCEL_WORD = /\b(cancel|stop|abort|never ?mind|discard)\b/;
+
+const normalize = (text: string) => text.trim().toLowerCase().replace(/[!.?,]+/g, " ").replace(/\s+/g, " ").trim();
+export const isConfirm = (text: string) => {
+  const t = normalize(text);
+  return LAUNCH_VERB.test(t) || YES.test(t);
+};
+export const isCancel = (text: string) => CANCEL_WORD.test(normalize(text));
 
 const cleanTicker = (v: string) =>
   v.replace(/^\$/, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 10);
@@ -79,7 +90,8 @@ export function parsePrompt(text: string): Draft {
   const nm = t.match(
     /\b(?:token\s+(?:named|called)|named|called|name|token)\s+["“]?([A-Za-z0-9][A-Za-z0-9 \-]{0,30}?)["”]?\s*(?=\s*(?:,|\.|$)|\s+(?:and|with|ticker|symbol|supply|x|twitter|web|website|site|url)\b)/i,
   );
-  if (nm) out.name = nm[1].trim();
+  // "deploy the token please" — filler after "token" is not a name
+  if (nm && !/^(please|pls|now|it|this|that|for me|already)$/i.test(nm[1].trim())) out.name = nm[1].trim();
 
   // "ZetaCoin ZETA" → name ZetaCoin, ticker ZETA
   if (out.name && !out.ticker) {

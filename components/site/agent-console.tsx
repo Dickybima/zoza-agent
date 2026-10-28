@@ -5,14 +5,14 @@ import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 
 import {
-  CANCEL,
-  CONFIRM,
   CREATOR_FEE,
   NETWORK,
   PROTOCOL_FEE,
   SUPPLY,
   TAX,
   fmt,
+  isCancel,
+  isConfirm,
   nextMissing,
   parseAnswer,
   parsePrompt,
@@ -76,7 +76,7 @@ export function AgentConsole() {
     askingRef.current = null;
     readyRef.current = true;
     render(draft, "awaiting confirmation");
-    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Type launch to deploy, or edit any field.`;
+    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Say launch or deploy to go live, or edit any field.`;
   };
 
   const deploy = async (): Promise<string> => {
@@ -113,23 +113,23 @@ export function AgentConsole() {
   };
 
   const reply = async (text: string): Promise<string> => {
-    const lower = text.trim().toLowerCase();
+    const p = parsePrompt(text);
+    const found = Object.keys(p).length > 0;
+    const draft = draftRef.current;
 
-    if (draftRef.current && CANCEL.test(lower)) {
+    // commands only count when the message carries no token details
+    if (!found && draft && isCancel(text)) {
       draftRef.current = null;
       askingRef.current = null;
       readyRef.current = false;
       setBlueprint(null);
       return "Understood, draft discarded. Tell me about the next token you’d like to create.";
     }
-    if (CONFIRM.test(lower)) {
+    if (!found && isConfirm(text)) {
       if (readyRef.current) return deploy();
       if (askingRef.current) return `Almost there, a few details are still missing. ${QUESTIONS[askingRef.current]}`;
+      if (!draft) return `There’s nothing to launch yet. ${QUESTIONS.name}`;
     }
-
-    const p = parsePrompt(text);
-    const found = Object.keys(p).length > 0;
-    const draft = draftRef.current;
 
     if (!draft) {
       if (!found) {
@@ -146,7 +146,7 @@ export function AgentConsole() {
       if (!Object.keys(a).length) return `That doesn’t look quite right. ${QUESTIONS[askingRef.current]}`;
       Object.assign(draft, a);
     } else {
-      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Type launch when you’re ready.";
+      return "To refine a detail, try name Liberty, ticker LBTY, x @liberty or web liberty.io. Say launch or deploy when you’re ready.";
     }
 
     readyRef.current = false;
