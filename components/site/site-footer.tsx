@@ -1,7 +1,7 @@
 import { Logo } from "@/components/site/logo";
 
 const LINKS = [
-  { href: "#", label: "X" },
+  { href: "https://x.com/usezoza", label: "X" },
 ];
 
 export function SiteFooter() {
@@ -19,7 +19,7 @@ export function SiteFooter() {
         </p>
         <nav className="flex gap-5 text-muted-foreground">
           {LINKS.map((l) => (
-            <a key={l.label} href={l.href} className="transition-colors hover:text-foreground">
+            <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground">
               {l.label}
             </a>
           ))}
