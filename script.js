@@ -5,6 +5,7 @@ const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const randHex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
 const fmt = (n) => n.toLocaleString("en-US");
+const shortAddr = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 
 $("#year").textContent = new Date().getFullYear();
 
@@ -15,23 +16,168 @@ $("#navLinks").addEventListener("click", (e) => {
 });
 
 // ---------- Wallet ----------
+// Wallet picker: detects installed wallets via EIP-6963 (plus the legacy
+// window.ethereum flags), offers install links for the rest, and a demo
+// wallet for trying Zoza without an extension.
+const WALLETS = [
+  { id: "robinhood", name: "Robinhood Wallet", match: /robinhood/i, legacy: (e) => e.isRobinhood, install: "https://robinhood.com/us/en/web3-wallet/", color: "#ccff00", letter: "R" },
+  { id: "metamask", name: "MetaMask", rdns: "io.metamask", legacy: (e) => e.isMetaMask && !e.isRabby, install: "https://metamask.io/download/", color: "#f6851b", letter: "M" },
+  { id: "coinbase", name: "Coinbase Wallet", rdns: "com.coinbase.wallet", legacy: (e) => e.isCoinbaseWallet, install: "https://www.coinbase.com/wallet/downloads", color: "#3773f5", letter: "C" },
+  { id: "rabby", name: "Rabby Wallet", rdns: "io.rabby", legacy: (e) => e.isRabby, install: "https://rabby.io/", color: "#8697ff", letter: "R" },
+  { id: "walletconnect", name: "WalletConnect", soon: true, color: "#3b99fc", letter: "W" },
+];
+
 let wallet = null;
+let walletName = null;
+let activeProvider = null;
+let pickResolve = null;
+const announced = new Map();
 const connectBtn = $("#connectBtn");
-async function connectWallet() {
-  try {
-    if (window.ethereum) {
-      const [acc] = await window.ethereum.request({ method: "eth_requestAccounts" });
-      wallet = acc;
-    } else {
-      wallet = "0x" + randHex(40); // demo wallet when no extension is installed
-    }
-  } catch {
-    return null;
+const walletModal = $("#walletModal");
+const walletList = $("#walletList");
+const walletError = $("#walletError");
+const walletMenu = $("#walletMenu");
+
+window.addEventListener("eip6963:announceProvider", (e) => {
+  announced.set(e.detail.info.uuid, e.detail);
+  if (!walletModal.hidden) renderWalletList();
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+function findProvider(w) {
+  for (const d of announced.values()) {
+    if ((w.rdns && d.info.rdns === w.rdns) || (w.match && w.match.test(d.info.name))) return d;
   }
-  connectBtn.textContent = wallet.slice(0, 6) + "…" + wallet.slice(-4);
-  return wallet;
+  const eth = window.ethereum;
+  if (eth && w.legacy) {
+    const list = eth.providers?.length ? eth.providers : [eth];
+    const p = list.find((x) => w.legacy(x));
+    if (p) return { info: { name: w.name }, provider: p };
+  }
+  return null;
 }
-connectBtn.addEventListener("click", connectWallet);
+
+let walletOptions = [];
+function renderWalletList() {
+  const used = new Set();
+  walletOptions = WALLETS.map((w) => {
+    const d = w.soon ? null : findProvider(w);
+    if (d?.info.uuid) used.add(d.info.uuid);
+    return { ...w, detail: d };
+  });
+  // any other installed wallet that announced itself
+  for (const d of announced.values()) {
+    if (!used.has(d.info.uuid)) walletOptions.push({ id: d.info.uuid, name: d.info.name, detail: d, color: "#2a2a40", letter: d.info.name[0] });
+  }
+  walletOptions.sort((a, b) => !!b.detail - !!a.detail);
+  walletOptions.push({ id: "demo", name: "Demo wallet", demo: true, color: "linear-gradient(135deg,#7c5cff,#00e0b8)", letter: "Z" });
+
+  walletList.innerHTML = walletOptions
+    .map((w, i) => {
+      const icon = w.detail?.info.icon && /^data:image\//.test(w.detail.info.icon)
+        ? `<img src="${escapeHtml(w.detail.info.icon)}" alt="" />`
+        : escapeHtml(w.letter);
+      const tag = w.soon ? '<span class="wallet-tag">Soon</span>'
+        : w.demo ? '<span class="wallet-tag">No install</span>'
+        : w.detail ? '<span class="wallet-tag ok">Detected</span>'
+        : '<span class="wallet-tag">Install ↗</span>';
+      const sep = w.demo ? '<div class="wallet-sep">Just exploring?</div>' : "";
+      return `${sep}<button type="button" class="wallet-opt" data-i="${i}" ${w.soon ? "disabled" : ""}>
+        <span class="wallet-icon" style="background:${w.color}">${icon}</span><b>${escapeHtml(w.name)}</b>${tag}</button>`;
+    })
+    .join("");
+}
+
+function openWalletModal() {
+  walletMenu.hidden = true;
+  walletError.hidden = true;
+  renderWalletList();
+  walletModal.hidden = false;
+  walletList.querySelector(".wallet-opt:not(:disabled)")?.focus();
+  return new Promise((resolve) => (pickResolve = resolve));
+}
+function closeWalletModal() {
+  walletModal.hidden = true;
+  pickResolve?.(wallet);
+  pickResolve = null;
+}
+
+function setWallet(addr, name, provider = null) {
+  wallet = addr;
+  walletName = name;
+  activeProvider = provider;
+  connectBtn.textContent = shortAddr(addr);
+  $("#walletMenuName").textContent = name;
+  $("#walletMenuAddr").textContent = shortAddr(addr);
+}
+function disconnectWallet() {
+  wallet = walletName = activeProvider = null;
+  walletMenu.hidden = true;
+  connectBtn.textContent = "Connect Wallet";
+}
+
+walletList.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".wallet-opt");
+  if (!btn) return;
+  const w = walletOptions[+btn.dataset.i];
+  walletError.hidden = true;
+
+  if (w.demo) {
+    setWallet("0x" + randHex(40), "Demo wallet");
+    return closeWalletModal();
+  }
+  if (!w.detail) {
+    window.open(w.install, "_blank", "noopener");
+    return;
+  }
+  btn.classList.add("busy");
+  btn.querySelector(".wallet-tag").textContent = "Connecting…";
+  try {
+    const [acc] = await w.detail.provider.request({ method: "eth_requestAccounts" });
+    if (!acc) throw new Error("No account returned");
+    setWallet(acc, w.name, w.detail.provider);
+    w.detail.provider.on?.("accountsChanged", (accs) => {
+      if (activeProvider !== w.detail.provider) return;
+      accs[0] ? setWallet(accs[0], w.name, w.detail.provider) : disconnectWallet();
+    });
+    closeWalletModal();
+  } catch (err) {
+    walletError.textContent = err?.code === 4001 ? "Connection request was rejected in your wallet." : "Couldn’t connect to " + w.name + ". Please try again.";
+    walletError.hidden = false;
+    renderWalletList();
+  }
+});
+walletModal.addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) closeWalletModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!walletModal.hidden) closeWalletModal();
+  walletMenu.hidden = true;
+});
+
+async function connectWallet() {
+  return wallet || openWalletModal();
+}
+connectBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (wallet) walletMenu.hidden = !walletMenu.hidden;
+  else openWalletModal();
+});
+document.addEventListener("click", (e) => {
+  if (!walletMenu.hidden && !e.target.closest(".wallet-wrap")) walletMenu.hidden = true;
+});
+$("#copyAddrBtn").addEventListener("click", async (e) => {
+  try {
+    await navigator.clipboard.writeText(wallet);
+    e.target.textContent = "Copied ✓";
+  } catch {
+    e.target.textContent = wallet;
+  }
+  setTimeout(() => (e.target.textContent = "Copy address"), 1600);
+});
+$("#switchWalletBtn").addEventListener("click", openWalletModal);
+$("#disconnectBtn").addEventListener("click", disconnectWallet);
 
 // ---------- Hero terminal ----------
 const termLines = [
@@ -205,7 +351,6 @@ function parseAnswer(field, text) {
 }
 
 const nextMissing = () => FIELDS.find((f) => !(f in draft));
-const shortAddr = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 
 function colorFor(s) {
   let h = 0;
@@ -314,7 +459,7 @@ async function deploy() {
   draft = null;
   ready = false;
   if (!wallet) {
-    await botSay("Connecting your wallet first…", 500);
+    await botSay("Choose a wallet to continue…", 400);
     await connectWallet();
     if (!wallet) return botSay("Wallet not connected. Please try again.");
   }
