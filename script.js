@@ -82,16 +82,19 @@ document.querySelectorAll(".card, .steps li, .phase, .faq details, .network-text
   el.classList.add("reveal");
   io.observe(el);
 });
-document.querySelectorAll("[data-count]").forEach((el) => {
-  const target = +el.dataset.count;
+// Animate a stat from its current value to `target`
+function animateCount(el, target, decimals = 0) {
+  const from = parseFloat(el.dataset.value || "0");
+  el.dataset.value = target;
   const start = performance.now();
   const tick = (t) => {
     const p = Math.min(1, (t - start) / 1600);
-    el.textContent = fmt(Math.round(target * (1 - Math.pow(1 - p, 3))));
+    const v = from + (target - from) * (1 - Math.pow(1 - p, 3));
+    el.textContent = v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
     if (p < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
-});
+}
 
 // ---------- Agent ----------
 // Creators only provide a name, ticker, X account, and website.
@@ -315,6 +318,7 @@ async function deploy() {
     await connectWallet();
     if (!wallet) return botSay("Wallet not connected. Please try again.");
   }
+  const startedAt = performance.now();
   const steps = [
     "🧠 Composing your smart contract from audited architecture…",
     `💸 Routing the ${CREATOR_FEE}% creator fee to ${shortAddr(wallet)} and ${PROTOCOL_FEE}% to the protocol…`,
@@ -329,7 +333,8 @@ async function deploy() {
   tok.address = "0x" + randHex(40);
   const tx = "0x" + randHex(64);
   renderPreview(tok, "● LIVE on Robinhood Chain (demo)", true);
-  publishToExplore({ ...tok, creator: wallet, tx, createdAt: Date.now() });
+  const launchSeconds = Math.round((performance.now() - startedAt) / 100) / 10;
+  publishToExplore({ ...tok, creator: wallet, tx, createdAt: Date.now(), launchSeconds });
   const done = await botSay(
     `✅ <b>${escapeHtml(tok.name)}</b> ($${escapeHtml(tok.ticker)}) is officially live!<br>
      Contract: <code>${tok.address}</code><br>
@@ -371,6 +376,16 @@ function publishToExplore(tok) {
   renderExplore(tok.address);
 }
 
+// Hero stats are derived from real launches, so they start at zero
+function updateStats() {
+  const creators = new Set(tokens.map((t) => (t.creator || "").toLowerCase())).size;
+  const timed = tokens.filter((t) => t.launchSeconds);
+  const avg = timed.length ? timed.reduce((s, t) => s + t.launchSeconds, 0) / timed.length : 0;
+  animateCount($("#statTokens"), tokens.length);
+  animateCount($("#statSeconds"), avg, avg ? 1 : 0);
+  animateCount($("#statCreators"), creators);
+}
+
 function timeAgo(ts) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "just now";
@@ -405,6 +420,7 @@ function renderExplore(highlight) {
   const sort = exploreSort.value;
   list.sort((a, b) => (sort === "az" ? a.name.localeCompare(b.name) : sort === "old" ? a.createdAt - b.createdAt : b.createdAt - a.createdAt));
 
+  updateStats();
   exploreCount.hidden = tokens.length === 0;
   exploreCount.textContent = tokens.length;
 
