@@ -40,7 +40,7 @@ export function Tokenize() {
   const router = useRouter();
   const { address, connect, getProvider } = useWallet();
   const { publish } = useTokens();
-  const { logo, pick, remove, settle } = useLogoUpload();
+  const { logo, pick, useHosted: setHostedLogo, remove, settle } = useLogoUpload();
 
   const [platform, setPlatform] = useState<Platform>("fomo");
   const [link, setLink] = useState("");
@@ -149,11 +149,9 @@ export function Tokenize() {
     setPicked(p);
     setRun({ kind: "idle" });
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    // the profile's picture becomes the token logo (uploaded like any other); the creator can change it
-    fetch(profileAvatar(p))
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => blob && pick(new File([blob], `${p.handle}.png`, { type: blob.type || "image/png" })))
-      .catch(() => {});
+    // the profile's picture is already hosted on this site, so its link becomes the token logo as is;
+    // the creator can still upload a different one
+    setHostedLogo(new URL(profileAvatar(p), window.location.origin).href);
   };
 
   const onFile = (file?: File | null) => {

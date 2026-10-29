@@ -18,7 +18,8 @@ export function useLogoUpload() {
   const job = useRef<Promise<unknown> | null>(null);
 
   const set = (next: Logo | null) => {
-    if (current.current && current.current.preview !== next?.preview) URL.revokeObjectURL(current.current.preview);
+    const prev = current.current?.preview;
+    if (prev?.startsWith("blob:") && prev !== next?.preview) URL.revokeObjectURL(prev);
     current.current = next;
     setState(next);
   };
@@ -37,6 +38,12 @@ export function useLogoUpload() {
     })();
   };
 
+  // an image already hosted on this site (e.g. a listed profile's picture): no upload needed
+  const useHosted = (url: string) => {
+    job.current = null;
+    set({ status: "ready", preview: url, url });
+  };
+
   const settle = async (): Promise<string> => {
     if (current.current?.status === "uploading") await job.current;
     const l = current.current;
@@ -44,5 +51,5 @@ export function useLogoUpload() {
     return l?.url ?? "";
   };
 
-  return { logo, pick, remove: () => set(null), settle };
+  return { logo, pick, useHosted, remove: () => set(null), settle };
 }
