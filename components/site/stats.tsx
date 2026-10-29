@@ -2,12 +2,12 @@
 
 import { useMemo } from "react";
 
-import { useTokens } from "@/lib/tokens";
+import { useAllLaunches } from "@/lib/launches";
 import { useCountUp } from "@/hooks/use-count-up";
 
 // Hero stats are derived from real launches, so they start at zero
 export function Stats() {
-  const { tokens } = useTokens();
+  const { tokens } = useAllLaunches();
   const { creators, avg } = useMemo(() => {
     const creators = new Set(tokens.map((t) => t.creator.toLowerCase())).size;
     const timed = tokens.filter((t) => t.launchSeconds);

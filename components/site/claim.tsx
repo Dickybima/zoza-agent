@@ -13,7 +13,7 @@ import type { CreatorToken } from "@/lib/fees";
 import { fmtEth, fmtUsd } from "@/lib/format";
 import { readClient } from "@/lib/rpc";
 import type { ChainError } from "@/lib/rpc";
-import { useTokens } from "@/lib/tokens";
+import { useAllLaunches } from "@/lib/launches";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { useEthUsd } from "@/hooks/use-eth-usd";
@@ -30,7 +30,7 @@ const ZERO = BigInt(0);
 
 export function Claim() {
   const { address, openPicker, getProvider } = useWallet();
-  const { tokens: local } = useTokens();
+  const { tokens: local } = useAllLaunches();
   const ethUsd = useEthUsd();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export function Claim() {
   const [action, setAction] = useState<Action>({ kind: "idle" });
 
   const wallet = address ? getAddress(address.toLowerCase()) : null;
-  // tokens this browser launched from the wallet, plus any found on-chain or added by hand
+  // Zoza launches from the wallet (shared list + this browser), plus any found on-chain or added by hand
   const candidates = useMemo(() => {
     if (!wallet) return [];
     const mine = local.filter((t) => t.creator.toLowerCase() === wallet.toLowerCase()).map((t) => t.address as Address);

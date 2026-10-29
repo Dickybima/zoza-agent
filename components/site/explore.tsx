@@ -11,7 +11,7 @@ import { explorerToken } from "@/lib/chain";
 import { OFFICIAL_ADDRESS, useOfficialToken } from "@/lib/official";
 import { PLATFORMS } from "@/lib/profile";
 import type { OfficialToken } from "@/lib/official";
-import { useTokens } from "@/lib/tokens";
+import { useAllLaunches } from "@/lib/launches";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,7 +25,7 @@ const tokenHref = (t: Pick<LaunchedToken, "address" | "block">) =>
 type Sort = "new" | "old" | "az";
 
 export function Explore() {
-  const { tokens: all, fresh } = useTokens();
+  const { tokens: all, fresh, status } = useAllLaunches();
   const official = useOfficialToken();
   const tokens = useMemo(() => all.filter((t) => t.address.toLowerCase() !== OFFICIAL_ADDRESS.toLowerCase()), [all]);
   const [q, setQ] = useState("");
@@ -134,7 +134,11 @@ export function Explore() {
         </div>
       )}
 
-      <p className="mt-10 text-center text-xs text-muted-foreground">{"// tokens launched through Zoza in this browser · live on Robinhood Chain"}</p>
+      <p className="mt-10 text-center text-xs text-muted-foreground">
+        {status === "error"
+          ? "// showing launches from this browser · Robinhood Chain didn’t answer, retrying"
+          : "// every token launched through Zoza · read from Robinhood Chain"}
+      </p>
     </Section>
   );
 }
@@ -190,7 +194,7 @@ function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: b
               ["contract", shortAddr(t.address)],
               ["creator", shortAddr(t.creator)],
               ["tax", `${TAX}% · ${CREATOR_FEE}% creator`],
-              ["launched", timeAgo(t.createdAt)],
+              ["launched", t.createdAt ? timeAgo(t.createdAt) : "—"],
             ]
         ).map(([k, v]) => (
           <div key={k} className="flex items-baseline gap-2">
