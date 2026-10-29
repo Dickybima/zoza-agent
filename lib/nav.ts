@@ -7,6 +7,7 @@ export const PAGES: NavPage[] = [
   { href: "/agent", label: "Agent", index: "03", blurb: "Converse with Zoza and launch a token." },
   { href: "/explore", label: "Explore", index: "04", blurb: "Every token born through Zoza." },
   { href: "/network", label: "Network", index: "05", blurb: "Built natively on Robinhood Chain." },
+  { href: "/tokenize", label: "Tokenize", index: "06", blurb: "Turn a fomo or pump.fun profile into a token." },
 ];
 
 /** true when `pathname` is `href` or below it (trailing slash tolerant) */

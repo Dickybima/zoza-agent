@@ -34,6 +34,8 @@ export type LaunchInput = {
   logo: string;
   /** creator tax in basis points, paid to the creator on every buy and sell */
   creatorTaxBps: number;
+  /** on-chain description; defaults to "<name> ($<ticker>) — launched with Zoza." */
+  description?: string;
 };
 
 export type LaunchResult = {
@@ -117,7 +119,7 @@ export async function launchToken(
       name: input.name,
       symbol: input.ticker,
       logo: input.logo,
-      description: `${input.name} ($${input.ticker}) — launched with Zoza.`,
+      description: input.description ?? `${input.name} ($${input.ticker}) — launched with Zoza.`,
       socials: {
         twitter: input.x ? `https://x.com/${input.x}` : "",
         telegram: "",

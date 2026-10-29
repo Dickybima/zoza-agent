@@ -9,6 +9,7 @@ import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
 import type { LaunchedToken } from "@/lib/agent";
 import { explorerToken } from "@/lib/chain";
 import { OFFICIAL_ADDRESS, useOfficialToken } from "@/lib/official";
+import { PLATFORMS } from "@/lib/profile";
 import type { OfficialToken } from "@/lib/official";
 import { useTokens } from "@/lib/tokens";
 import { Badge } from "@/components/ui/badge";
@@ -165,7 +166,10 @@ function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: b
         <TokenAvatar src={t.logo} label={t.ticker} seed={t.address} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{t.name}</p>
-          <p className="text-xs text-muted-foreground">${t.ticker}</p>
+          <p className="text-xs text-muted-foreground">
+            ${t.ticker}
+            {t.profile ? <span className="text-signal"> · {PLATFORMS[t.profile.platform].label} profile</span> : null}
+          </p>
         </div>
         {official ? <Badge variant="signal">Official</Badge> : fresh ? <Badge variant="signal">New</Badge> : null}
       </Link>
@@ -202,7 +206,7 @@ function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: b
         {t.website ? (
           <Button variant="outline" size="sm" asChild>
             <a href={`https://${encodeURI(t.website)}`} target="_blank" rel="noopener noreferrer">
-              <GlobeIcon /> Website
+              <GlobeIcon /> {t.profile ? `${PLATFORMS[t.profile.platform].label} profile` : "Website"}
             </a>
           </Button>
         ) : null}

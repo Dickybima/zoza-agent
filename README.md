@@ -20,7 +20,7 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
@@ -53,6 +53,10 @@ See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `cont
 Creators upload their own logo in the blueprint panel (button or drag & drop). The browser center-crops it to a square and resizes it to 512×512 WEBP (`lib/upload.ts`), then `api/upload.mjs` checks it is a real PNG/JPG/WEBP/GIF under 1 MB and stores it in **Vercel Blob**, named by its content hash. The returned public URL becomes the token's on-chain `logo` (the launch factory caps that field at 512 bytes, so the image itself can't go on-chain). The logo is optional; tokens without one get a pattern derived from their address.
 
 Uploads need a Blob store connected to the Vercel project: Storage → Create → Blob → connect it to this project, which adds `BLOB_READ_WRITE_TOKEN`; then redeploy. Without it, uploading shows "Logo uploads aren't set up on this site yet." Older tokens with Pollinations or IPFS logos are still displayed through `api/logo.js`.
+
+### Tokenize
+
+`/tokenize` launches a token from a fomo (fomo.family) or pump.fun profile. Neither platform has an official API for reading profiles, so the creator pastes the profile link (`lib/profile.ts` checks the host and path, and prefills the name and ticker from the username) and uploads the picture themselves. The launch goes through the same factory call as the agent; the profile link is stored as the token's on-chain website and in its description (social links are capped at 256 bytes), and Explore labels the card with the platform. Profiles aren't verified, and the creator fee goes to the launching wallet.
 
 ### Token pages and trading
 
