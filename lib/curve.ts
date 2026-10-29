@@ -155,7 +155,7 @@ async function stampBlocks(client: Client, blocks: bigint[]) {
  * Logs in [from, to], split into chunks that shrink when the RPC rejects a
  * range as too large.
  */
-async function chunkedLogs<T>(from: bigint, to: bigint, get: (from: bigint, to: bigint) => Promise<T[]>): Promise<T[]> {
+export async function chunkedLogs<T>(from: bigint, to: bigint, get: (from: bigint, to: bigint) => Promise<T[]>): Promise<T[]> {
   const out: T[] = [];
   let size = BigInt(50_000);
   let start = from;
