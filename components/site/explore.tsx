@@ -168,7 +168,12 @@ function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: b
           <p className="truncate font-semibold">{t.name}</p>
           <p className="text-xs text-muted-foreground">
             ${t.ticker}
-            {t.profile ? <span className="text-signal"> · {PLATFORMS[t.profile.platform].label} profile</span> : null}
+            {t.profile ? (
+              <span className="text-signal">
+                {" "}
+                · {PLATFORMS[t.profile.platform].label} profile{t.profile.unofficial ? " · unofficial" : ""}
+              </span>
+            ) : null}
           </p>
         </div>
         {official ? <Badge variant="signal">Official</Badge> : fresh ? <Badge variant="signal">New</Badge> : null}

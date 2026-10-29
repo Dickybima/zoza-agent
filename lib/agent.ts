@@ -34,7 +34,7 @@ export type LaunchedToken = {
   createdAt: number;
   launchSeconds?: number;
   /** set when the token was launched from a fomo or pump.fun profile */
-  profile?: { platform: "fomo" | "pumpfun"; url: string };
+  profile?: { platform: "fomo" | "pumpfun"; url: string; unofficial?: boolean };
 };
 
 const SKIP = /^(skip|none|n\/a|na|no|not yet|-)$/i;

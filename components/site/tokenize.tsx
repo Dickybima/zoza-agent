@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowUpRightIcon, ImageUpIcon, LoaderIcon, RocketIcon, XIcon } from "lucide-react";
@@ -11,6 +11,8 @@ import { launchToken } from "@/lib/launchpad";
 import type { LaunchError } from "@/lib/launchpad";
 import { PLATFORMS, parseProfile, tickerFrom } from "@/lib/profile";
 import type { Platform } from "@/lib/profile";
+import { SNAPSHOT_DATE, TOP_PROFILES, profileUrl } from "@/lib/top-profiles";
+import type { TopProfile } from "@/lib/top-profiles";
 import { useTokens } from "@/lib/tokens";
 import { LOGO_ACCEPT } from "@/lib/upload";
 import { useWallet } from "@/lib/wallet";
@@ -49,6 +51,9 @@ export function Tokenize() {
   const [touched, setTouched] = useState({ name: false, ticker: false });
   const [run, setRun] = useState<Run>({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
+  // set while the form holds a profile picked from the top list; cleared on any manual edit of the link
+  const [picked, setPicked] = useState<TopProfile | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const parsed = parseProfile(platform, link);
   const profile = "url" in parsed ? parsed : null;
@@ -105,7 +110,9 @@ export function Tokenize() {
           website: profile.url.replace(/^https:\/\//, ""),
           logo: logoUrl,
           creatorTaxBps: CREATOR_FEE * 100,
-          description: `${tokName} ($${tokTicker}) — a tokenized ${label} profile: ${profile.url}. Launched with Zoza.`,
+          description:
+            `${tokName} ($${tokTicker}) — a tokenized ${label} profile: ${profile.url}. Launched with Zoza.` +
+            (picked ? ` Unofficial: not created or endorsed by @${picked.handle}.` : ""),
         },
         (status) => setRun({ kind: "launching", status }),
       );
@@ -122,13 +129,26 @@ export function Tokenize() {
         tx: result.hash,
         createdAt: wallClock(),
         launchSeconds: Math.round((clock() - sentAt) / 100) / 10,
-        profile: { platform, url: profile.url },
+        profile: { platform, url: profile.url, ...(picked ? { unofficial: true } : {}) },
       });
       setRun({ kind: "live", token: result.token, tx: result.hash });
     } catch (err) {
       const e = err as LaunchError;
       setRun({ kind: "error", message: e.rejected ? "Launch cancelled in your wallet." : `Launch failed: ${e.message}` });
     }
+  };
+
+  // fill the form from a listed profile, then bring the form into view
+  const pickProfile = (p: TopProfile) => {
+    if (busy || live) return;
+    setPlatform(p.platform);
+    setLink(profileUrl(p));
+    setName(p.name);
+    setTicker(tickerFrom(p.handle));
+    setTouched({ name: true, ticker: true });
+    setPicked(p);
+    setRun({ kind: "idle" });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const onFile = (file?: File | null) => {
@@ -142,9 +162,9 @@ export function Tokenize() {
         trade: {CREATOR_FEE}% to you.
       </SectionHeading>
 
-      <div className="grid gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-start">
+      <div ref={formRef} className="grid scroll-mt-28 gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-start">
         {/* form */}
-        <div className="border border-border bg-card/50">
+        <div className={cn("border bg-card/50 transition-colors duration-700", picked ? "border-signal/60" : "border-border")}>
           <PanelBar title="tokenize --profile" />
           <div className="space-y-6 p-5 sm:p-6">
             <div>
@@ -157,7 +177,10 @@ export function Tokenize() {
                     role="radio"
                     aria-checked={platform === p}
                     disabled={busy || live}
-                    onClick={() => setPlatform(p)}
+                    onClick={() => {
+                      setPlatform(p);
+                      setPicked(null);
+                    }}
                     className={cn(
                       "px-3 py-2.5 text-sm transition-colors first:border-r first:border-border",
                       platform === p ? "bg-signal text-signal-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -172,7 +195,10 @@ export function Tokenize() {
             <Field label="profile link" hint={link && linkError ? linkError : undefined} error={!!(link && linkError)}>
               <Input
                 value={link}
-                onChange={(e) => setLink(e.target.value)}
+                onChange={(e) => {
+                  setLink(e.target.value);
+                  setPicked(null);
+                }}
                 placeholder={PLATFORMS[platform].example}
                 disabled={busy || live}
                 inputMode="url"
@@ -346,7 +372,105 @@ export function Tokenize() {
           </p>
         </div>
       </div>
+
+      <TopProfiles onPick={pickProfile} disabled={busy || live} pickedHandle={picked?.handle ?? null} />
     </Section>
+  );
+}
+
+type Filter = "all" | Platform;
+
+function TopProfiles({ onPick, disabled, pickedHandle }: { onPick: (p: TopProfile) => void; disabled: boolean; pickedHandle: string | null }) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const rows = TOP_PROFILES.filter((p) => filter === "all" || p.platform === filter).sort((a, b) => b.followers - a.followers);
+  const tabs: [Filter, string][] = [["all", "All"], ["fomo", "@fomo"], ["pumpfun", "@pump.fun"]];
+
+  return (
+    <div className="mt-20">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-xl">
+          <p className="mb-3 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+            <span className="text-signal">[ ★ ]</span> top profiles
+          </p>
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Tokenize a top profile.</h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            The most-followed creators on fomo and pump.fun. Press Tokenize and the form above fills itself in; review it, add the
+            picture, and launch.
+          </p>
+        </div>
+        <div role="tablist" aria-label="Filter profiles" className="flex shrink-0 border border-border">
+          {tabs.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={filter === k}
+              onClick={() => setFilter(k)}
+              className={cn(
+                "px-3 py-2 text-xs transition-colors not-last:border-r not-last:border-border",
+                filter === k ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border border-border">
+        <table className="w-full min-w-[34rem] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+              <th className="w-12 px-4 py-3 font-normal">#</th>
+              <th className="px-4 py-3 font-normal">profile</th>
+              <th className="px-4 py-3 text-right font-normal">followers</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((p, i) => (
+                <tr
+                  key={p.platform + p.handle}
+                  className={cn("border-b border-dashed border-border last:border-b-0 transition-colors hover:bg-accent/50", pickedHandle === p.handle && "bg-signal/5")}
+                >
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">{i + 1}</td>
+                  <td className="px-4 py-3">
+                    <a href={profileUrl(p)} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-3">
+                      <TokenAvatar src={null} label={p.name} seed={p.platform + p.handle} className="size-10 rounded-full" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold group-hover:text-signal">{p.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          @{p.handle} · {PLATFORMS[p.platform].label}
+                        </span>
+                      </span>
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {p.followers.toLocaleString("en-US", { notation: "compact", maximumFractionDigits: 1 })}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant={pickedHandle === p.handle ? "signal" : "outline"} size="sm" disabled={disabled} onClick={() => onPick(p)}>
+                      {pickedHandle === p.handle ? "Selected ✓" : "Tokenize"}
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-xs text-muted-foreground">
+                  No {filter === "pumpfun" ? "pump.fun" : "fomo"} profiles listed yet. Paste any profile link in the form above.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Follower counts as of {SNAPSHOT_DATE}. Tokens launched from this list are marked unofficial on-chain and in Explore: they
+        aren’t created or endorsed by the profile owner.
+      </p>
+    </div>
   );
 }
 
