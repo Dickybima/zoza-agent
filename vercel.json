@@ -3,5 +3,10 @@
   "framework": null,
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "outputDirectory": "out"
+  "outputDirectory": "out",
+  "functions": {
+    "api/logo.js": {
+      "maxDuration": 60
+    }
+  }
 }

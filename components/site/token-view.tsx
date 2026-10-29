@@ -150,7 +150,7 @@ export function TokenView() {
 
       {/* header */}
       <div className="mb-8 flex flex-wrap items-center gap-5">
-        <TokenAvatar src={logo} label={info.symbol} className="size-16 sm:size-20" />
+        <TokenAvatar src={logo} label={info.symbol} seed={info.address} className="size-16 sm:size-20" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{info.name}</h1>
