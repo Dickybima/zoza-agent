@@ -17,8 +17,6 @@ export type Draft = {
   ticker?: string;
   x?: string | null;
   website?: string | null;
-  /** seed for the AI-generated token artwork */
-  seed?: number;
 };
 
 export type LaunchedToken = {

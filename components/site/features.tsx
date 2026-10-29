@@ -28,7 +28,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: PaletteIcon,
     title: "Identity with character",
-    body: "Logos, narrative, and launch materials crafted by AI — so your token doesn’t just exist, it’s recognized.",
+    body: "Upload your own logo and it travels with your token everywhere — written into its on-chain metadata from the first block.",
   },
   {
     icon: LayoutDashboardIcon,

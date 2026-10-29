@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRightIcon, RefreshCwIcon, RocketIcon } from "lucide-react";
+import { ArrowRightIcon, ImageUpIcon, RocketIcon, XIcon } from "lucide-react";
 
 import {
   CREATOR_FEE,
@@ -23,8 +23,8 @@ import type { Draft, Field } from "@/lib/agent";
 import { explorerTx } from "@/lib/chain";
 import { launchToken } from "@/lib/launchpad";
 import type { LaunchError, LaunchResult } from "@/lib/launchpad";
-import { newImageSeed, tokenImageUrl } from "@/lib/token-image";
 import { useTokens } from "@/lib/tokens";
+import { LOGO_ACCEPT, UploadError, prepareLogo, uploadLogo } from "@/lib/upload";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,8 @@ import MorphOrb from "@/components/ui/ai-thiking-orb-and-input";
 import { TokenAvatar } from "@/components/site/token-avatar";
 
 type Blueprint = { tok: Draft & { address?: string }; status: string; live?: boolean; tx?: string };
+/** The creator's uploaded logo: shown from a local preview while it uploads. */
+type Logo = { status: "uploading" | "ready" | "error"; preview: string; url?: string; error?: string };
 type Turn = { you: string; zoza: string };
 
 // Replies render inside the orb's answer card, so they stay short plain text.
@@ -102,6 +104,10 @@ export function AgentConsole() {
   const draftRef = useRef<Draft | null>(null);
   const askingRef = useRef<Field | null>(null);
   const readyRef = useRef(false);
+  const [logo, setLogoState] = useState<Logo | null>(null);
+  // deploy() runs inside the orb's async flow, so it reads the logo from refs
+  const logoRef = useRef<Logo | null>(null);
+  const logoJob = useRef<Promise<string | null> | null>(null);
 
   // readyRef is read inside the orb's async flow; `ready` drives the Launch buttons
   const markReady = (v: boolean) => {
@@ -111,10 +117,32 @@ export function AgentConsole() {
 
   const render = (tok: Draft, status: string) => setBlueprint({ tok: { ...tok }, status });
 
+  const setLogo = (next: Logo | null) => {
+    if (logoRef.current && logoRef.current.preview !== next?.preview) URL.revokeObjectURL(logoRef.current.preview);
+    logoRef.current = next;
+    setLogoState(next);
+  };
+
+  // resize and upload right away, so the logo is usually ready by the time Launch is pressed
+  const pickLogo = (file: File) => {
+    const preview = URL.createObjectURL(file);
+    setLogo({ status: "uploading", preview });
+    const job = (async () => {
+      try {
+        const url = await uploadLogo(await prepareLogo(file));
+        if (logoRef.current?.preview === preview) setLogo({ status: "ready", preview, url });
+        return url;
+      } catch (err) {
+        const error = err instanceof UploadError ? err.message : "Upload failed. Please try again.";
+        if (logoRef.current?.preview === preview) setLogo({ status: "error", preview, error });
+        return null;
+      }
+    })();
+    logoJob.current = job;
+  };
+
   const askNext = (): string => {
     const draft = draftRef.current!;
-    // artwork is generated as soon as the token has a name
-    if (draft.name && draft.seed === undefined) draft.seed = newImageSeed();
     const f = nextMissing(draft);
     if (f) {
       askingRef.current = f;
@@ -124,7 +152,7 @@ export function AgentConsole() {
     askingRef.current = null;
     markReady(true);
     render(draft, "awaiting confirmation");
-    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. Press Launch to go live, or edit any field.`;
+    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. ${logoRef.current ? "Press Launch to go live" : "Upload a logo in the blueprint if you like, then press Launch"}, or edit any field.`;
   };
 
   const deploy = async (): Promise<string> => {
@@ -132,6 +160,18 @@ export function AgentConsole() {
     const wallet = address ?? (await connect());
     const provider = getProvider();
     if (!wallet || !provider) return "No wallet connected, so nothing was launched. Press Launch to try again.";
+
+    // the logo link goes into the token's on-chain metadata, so it has to be uploaded first
+    if (logoRef.current?.status === "uploading") {
+      render(tok, "finishing the logo upload");
+      await logoJob.current;
+    }
+    const pending = logoRef.current as Logo | null;
+    if (pending?.status === "error") {
+      render(tok, "logo upload failed");
+      return `The logo didn’t upload: ${pending.error} Upload it again or remove it, then press Launch.`;
+    }
+    const logoUrl = pending?.url ?? "";
 
     let result: LaunchResult;
     const sentAt = performance.now();
@@ -144,7 +184,7 @@ export function AgentConsole() {
           ticker: tok.ticker!,
           x: tok.x ?? null,
           website: tok.website ?? null,
-          logo: tokenImageUrl(tok.name!, tok.seed ?? 0),
+          logo: logoUrl,
           creatorTaxBps: CREATOR_FEE * 100,
         },
         (status) => render(tok, status),
@@ -167,7 +207,7 @@ export function AgentConsole() {
       website: tok.website ?? null,
       address: result.token,
       curve: result.curve,
-      logo: tokenImageUrl(tok.name!, tok.seed ?? 0),
+      logo: logoUrl || undefined,
       block: Number(result.block),
       creator: wallet,
       tx: result.hash,
@@ -189,6 +229,7 @@ export function AgentConsole() {
       askingRef.current = null;
       markReady(false);
       setBlueprint(null);
+      setLogo(null);
       return "Understood, draft discarded. Tell me about the next token you’d like to create.";
     }
     if (!found && isConfirm(text)) {
@@ -205,6 +246,7 @@ export function AgentConsole() {
       } else draftRef.current = p;
     } else if (p.name && readyRef.current && /\btoken\b/i.test(text)) {
       draftRef.current = p; // "token ..." after the summary starts a new token; "name ..." renames
+      setLogo(null);
     } else if (found) {
       Object.assign(draft, p);
     } else if (askingRef.current) {
@@ -223,14 +265,6 @@ export function AgentConsole() {
     const answer = await reply(text);
     setLog((l) => [...l, { you: text, zoza: answer }]);
     return answer;
-  };
-
-  // new artwork for the current draft
-  const restyle = () => {
-    const d = draftRef.current;
-    if (!d?.name) return;
-    d.seed = newImageSeed();
-    setBlueprint((bp) => (bp ? { ...bp, tok: { ...d } } : bp));
   };
 
   // after a launch, let the creator read the orb's result, then open Explore
@@ -312,7 +346,9 @@ export function AgentConsole() {
             wallet={address}
             onLaunch={ready ? launch : undefined}
             canLaunch={canLaunch}
-            onRestyle={!launching && (phase === "idle" || phase === "answered") ? restyle : undefined}
+            logo={logo}
+            onPickLogo={!launching && (phase === "idle" || phase === "answered") ? pickLogo : undefined}
+            onRemoveLogo={() => setLogo(null)}
           />
           {log.length ? <SessionLog log={log} /> : null}
         </div>
@@ -382,14 +418,20 @@ function BlueprintPanel({
   wallet,
   onLaunch,
   canLaunch,
-  onRestyle,
+  logo,
+  onPickLogo,
+  onRemoveLogo,
 }: {
   bp: Blueprint | null;
   wallet: string | null;
   onLaunch?: () => void;
   canLaunch: boolean;
-  onRestyle?: () => void;
+  logo: Logo | null;
+  /** unset while a launch is under way */
+  onPickLogo?: (file: File) => void;
+  onRemoveLogo: () => void;
 }) {
+  const [dragging, setDragging] = useState(false);
   if (!bp) {
     return (
       <div className="border border-border bg-background/80 backdrop-blur-sm">
@@ -417,24 +459,82 @@ function BlueprintPanel({
       <PanelBar title="blueprint.json" />
       <div className="p-4">
         <div className="mb-4 flex items-center gap-3">
-          <TokenAvatar
-            src={tok.name ? tokenImageUrl(tok.name, tok.seed ?? 0) : null}
-            label={tok.ticker || tok.name || ""}
-            className="size-16"
-          />
+          {/* the avatar doubles as a drop zone for the logo */}
+          <label
+            className={cn(
+              "relative shrink-0",
+              !bp.live && onPickLogo && "cursor-pointer",
+              dragging && "outline-2 outline-offset-2 outline-dashed outline-signal",
+            )}
+            onDragOver={(e) => {
+              if (bp.live || !onPickLogo) return;
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const file = e.dataTransfer.files[0];
+              if (file && onPickLogo && !bp.live) onPickLogo(file);
+            }}
+          >
+            <TokenAvatar src={logo?.preview ?? null} label={tok.ticker || tok.name || ""} className="size-16" />
+            {!bp.live ? (
+              <input
+                type="file"
+                accept={LOGO_ACCEPT}
+                disabled={!onPickLogo}
+                className="sr-only"
+                aria-label="Upload a logo"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file && onPickLogo) onPickLogo(file);
+                }}
+              />
+            ) : null}
+          </label>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{tok.name || "New token"}</p>
             <p className="text-xs text-muted-foreground">{tok.ticker ? "$" + tok.ticker : "ticker pending"}</p>
-            {tok.name && !bp.live ? (
-              <button
-                type="button"
-                onClick={onRestyle}
-                disabled={!onRestyle}
-                className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-              >
-                <RefreshCwIcon className="size-3" /> new artwork
-              </button>
+            {!bp.live ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                <label
+                  className={cn(
+                    "flex items-center gap-1.5 text-muted-foreground transition-colors",
+                    onPickLogo ? "cursor-pointer hover:text-foreground" : "opacity-50",
+                  )}
+                >
+                  <ImageUpIcon className="size-3" /> {logo ? "change logo" : "upload logo"}
+                  <input
+                    type="file"
+                    accept={LOGO_ACCEPT}
+                    disabled={!onPickLogo}
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file && onPickLogo) onPickLogo(file);
+                    }}
+                  />
+                </label>
+                {logo && onPickLogo ? (
+                  <button type="button" onClick={onRemoveLogo} className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                    <XIcon className="size-3" /> remove
+                  </button>
+                ) : null}
+              </div>
             ) : null}
+            {!bp.live && logo ? (
+              <p
+                role="status"
+                className={cn("mt-1 text-[11px]", logo.status === "error" ? "text-destructive" : logo.status === "ready" ? "text-signal" : "text-muted-foreground")}
+              >
+                {logo.status === "uploading" ? "uploading…" : logo.status === "ready" ? "✓ logo ready" : logo.error}
+              </p>
+            ) : null}
+            {!bp.live && !logo ? <p className="mt-1 text-[11px] text-muted-foreground/70">PNG, JPG, WEBP or GIF · square works best</p> : null}
           </div>
         </div>
         <dl className="space-y-2 text-xs">

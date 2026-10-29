@@ -48,9 +48,11 @@ Chain reads race three sources and take the first answer: the same-origin proxy 
 
 See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `contractsV2/src/v2/PonsV2LaunchFactory.sol`) and `lib/chain.ts` (RPC, explorer). Verify the factory address on the explorer before relying on it.
 
-### Token artwork
+### Token logos
 
-As soon as a draft has a name, Zoza generates mascot artwork for it (e.g. "Moon Cat" → a cat) with Pollinations' free text-to-image endpoint (`lib/token-image.ts`, no API key). "new artwork" re-rolls the seed; the image URL is stored as the token's on-chain `logo`.
+Creators upload their own logo in the blueprint panel (button or drag & drop). The browser center-crops it to a square and resizes it to 512×512 WEBP (`lib/upload.ts`), then `api/upload.mjs` checks it is a real PNG/JPG/WEBP/GIF under 1 MB and stores it in **Vercel Blob**, named by its content hash. The returned public URL becomes the token's on-chain `logo` (the launch factory caps that field at 512 bytes, so the image itself can't go on-chain). The logo is optional; tokens without one get a pattern derived from their address.
+
+Uploads need a Blob store connected to the Vercel project: Storage → Create → Blob → connect it to this project, which adds `BLOB_READ_WRITE_TOKEN`; then redeploy. Without it, uploading shows "Logo uploads aren't set up on this site yet." Older tokens with Pollinations or IPFS logos are still displayed through `api/logo.js`.
 
 ### Token pages and trading
 
