@@ -11,7 +11,7 @@ import { launchToken } from "@/lib/launchpad";
 import type { LaunchError } from "@/lib/launchpad";
 import { PLATFORMS, parseProfile, tickerFrom } from "@/lib/profile";
 import type { Platform } from "@/lib/profile";
-import { SNAPSHOT_DATE, TOP_PROFILES, profileUrl } from "@/lib/top-profiles";
+import { SNAPSHOT_DATE, TOP_PROFILES, profileAvatar, profileUrl } from "@/lib/top-profiles";
 import type { TopProfile } from "@/lib/top-profiles";
 import { useTokens } from "@/lib/tokens";
 import { LOGO_ACCEPT } from "@/lib/upload";
@@ -149,6 +149,11 @@ export function Tokenize() {
     setPicked(p);
     setRun({ kind: "idle" });
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // the profile's picture becomes the token logo (uploaded like any other); the creator can change it
+    fetch(profileAvatar(p))
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => blob && pick(new File([blob], `${p.handle}.png`, { type: blob.type || "image/png" })))
+      .catch(() => {});
   };
 
   const onFile = (file?: File | null) => {
@@ -394,8 +399,8 @@ function TopProfiles({ onPick, disabled, pickedHandle }: { onPick: (p: TopProfil
           </p>
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Tokenize a top profile.</h2>
           <p className="mt-3 text-sm text-muted-foreground">
-            The most-followed creators on fomo and pump.fun. Press Tokenize and the form above fills itself in; review it, add the
-            picture, and launch.
+            The most-followed creators on fomo and pump.fun. Press Tokenize and the form above fills itself in, picture included;
+            review it and launch.
           </p>
         </div>
         <div role="tablist" aria-label="Filter profiles" className="flex shrink-0 border border-border">
@@ -437,7 +442,7 @@ function TopProfiles({ onPick, disabled, pickedHandle }: { onPick: (p: TopProfil
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">{i + 1}</td>
                   <td className="px-4 py-3">
                     <a href={profileUrl(p)} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-3">
-                      <TokenAvatar src={null} label={p.name} seed={p.platform + p.handle} className="size-10 rounded-full" />
+                      <TokenAvatar src={profileAvatar(p)} label={p.name} seed={p.platform + p.handle} className="size-10 rounded-full border-0" />
                       <span className="min-w-0">
                         <span className="block truncate font-semibold group-hover:text-signal">{p.name}</span>
                         <span className="block truncate text-xs text-muted-foreground">
