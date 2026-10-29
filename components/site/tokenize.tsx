@@ -53,6 +53,8 @@ export function Tokenize() {
   const [dragging, setDragging] = useState(false);
   // set while the form holds a profile picked from the top list; cleared on any manual edit of the link
   const [picked, setPicked] = useState<TopProfile | null>(null);
+  // a half-typed link isn't an error yet: say what's wrong once the field is left
+  const [linkFocused, setLinkFocused] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
 
   const parsed = parseProfile(platform, link);
@@ -195,7 +197,7 @@ export function Tokenize() {
               </div>
             </div>
 
-            <Field label="profile link" hint={link && linkError ? linkError : undefined} error={!!(link && linkError)}>
+            <Field label="profile link" hint={link && linkError && !linkFocused ? linkError : undefined} error={!!(link && linkError && !linkFocused)}>
               <Input
                 value={link}
                 onChange={(e) => {
@@ -205,6 +207,8 @@ export function Tokenize() {
                 placeholder={PLATFORMS[platform].example}
                 disabled={busy || live}
                 inputMode="url"
+                onFocus={() => setLinkFocused(true)}
+                onBlur={() => setLinkFocused(false)}
                 autoComplete="off"
                 spellCheck={false}
               />
