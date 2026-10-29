@@ -163,7 +163,7 @@ function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: b
   return (
     <Card className={fresh ? "border-signal/60 animate-in fade-in-0 zoom-in-95 duration-500" : official ? "border-signal/50" : undefined}>
       <Link href={tokenHref(t)} className="flex items-start gap-3 hover:text-signal">
-        <TokenAvatar src={t.logo} label={t.ticker} seed={t.address} className="size-14" />
+        <TokenAvatar src={t.logo} label={t.ticker} seed={t.address} fallback={official ? "/icon.svg" : undefined} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{t.name}</p>
           <p className="text-xs text-muted-foreground">

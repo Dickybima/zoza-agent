@@ -14,15 +14,21 @@ export function TokenAvatar({
   src,
   label,
   seed,
+  fallback,
   className,
 }: {
   src?: string | null;
   label: string;
+  /** an image to try after every logo source fails, before the pattern */
+  fallback?: string;
   /** what the fallback pattern is derived from; defaults to the label */
   seed?: string;
   className?: string;
 }) {
-  const sources = useMemo(() => logoSources(src), [src]);
+  const sources = useMemo(() => {
+    const list = logoSources(src);
+    return fallback && !list.includes(fallback) ? [...list, fallback] : list;
+  }, [src, fallback]);
   const [attempt, setAttempt] = useState({ key: sources.join("|"), index: 0, loaded: false });
   // a new logo starts over from its first source
   const key = sources.join("|");

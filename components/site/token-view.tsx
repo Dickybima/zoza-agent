@@ -136,8 +136,9 @@ export function TokenView() {
   const price = spotPrice(curve);
   const mcap = price * Number(formatEther(info.totalSupply));
   const progress = curve.threshold > BigInt(0) ? Math.min(1, Number(formatEther(curve.realQuote)) / Number(formatEther(curve.threshold))) : 0;
-  // the official token falls back to the Zoza mark until it has on-chain artwork
-  const logo = info.logo || local?.logo || (info.address.toLowerCase() === OFFICIAL_ADDRESS.toLowerCase() ? "/icon.svg" : undefined);
+  const logo = info.logo || local?.logo;
+  // the official token shows the Zoza mark if its on-chain artwork is missing or won't load
+  const logoFallback = info.address.toLowerCase() === OFFICIAL_ADDRESS.toLowerCase() ? "/icon.svg" : undefined;
   const lastTrade = trades[trades.length - 1];
   const firstPrice = trades[0]?.price;
   const change = firstPrice && lastTrade ? (lastTrade.price / firstPrice - 1) * 100 : 0;
@@ -150,7 +151,7 @@ export function TokenView() {
 
       {/* header */}
       <div className="mb-8 flex flex-wrap items-center gap-5">
-        <TokenAvatar src={logo} label={info.symbol} seed={info.address} className="size-16 sm:size-20" />
+        <TokenAvatar src={logo} label={info.symbol} seed={info.address} fallback={logoFallback} className="size-16 sm:size-20" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{info.name}</h1>
