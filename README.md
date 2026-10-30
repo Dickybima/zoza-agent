@@ -58,6 +58,10 @@ Uploads need a Blob store connected to the Vercel project: Storage → Create �
 
 `/tokenize` launches a token from a fomo (fomo.family) or pump.fun profile. Neither platform has an official API for reading profiles, so the creator pastes the profile link (`lib/profile.ts` checks the host and path, and prefills the name and ticker from the username) and uploads the picture themselves. The launch goes through the same factory call as the agent; the profile link is stored as the token's on-chain website and in its description (social links are capped at 256 bytes), and Explore labels the card with the platform. Profiles aren't verified, and the creator fee goes to the launching wallet.
 
+### $ZOZA holder leaderboard
+
+The home page ranks $ZOZA holders (`components/site/holder-board.tsx`). `api/holders.mjs` replays every `Transfer` of the token since its launch block (found from the factory's `TokenLaunched` event), so balances and badges come straight from the chain: 🐋 whale holds at least 1% of supply, 💎 diamond hands never sent tokens anywhere except to a burn address, 🔥 burner sent some to `0x0…dEaD` or `0x0`. Addresses with contract code (the bonding curve, the graduated pool, vaults) aren't ranked. The top 50 is edge-cached for a minute; `?me=0x…` adds the connected wallet's own rank.
+
 ### Claiming creator fees
 
 `/claim` (`lib/fees.ts`) shows a creator's fees. Each trade books the creator tax, plus the creator's share of the base fee, on the token's bonding curve; the creator can call the curve's `sweepFees(0)` to move it into the launchpad's shared fee escrow (`factory.feeEscrow()`), which works while no buyback is pending (Zoza launches have buyback off). Graduated pools pay into the same escrow. `claim()` on the escrow sends the wallet's whole ETH balance to it. The page lists the wallet's launches (from this browser, from `TokenLaunched` events filtered by deployer, or added by address), with a Collect button per token and a Claim all button that collects every token and then claims.
