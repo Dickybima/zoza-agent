@@ -20,7 +20,7 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
@@ -61,6 +61,10 @@ Uploads need a Blob store connected to the Vercel project: Storage → Create �
 ### $ZOZA holder leaderboard
 
 The home page ranks $ZOZA holders (`components/site/holder-board.tsx`). `api/holders.mjs` replays every `Transfer` of the token since its launch block (found from the factory's `TokenLaunched` event), so balances and badges come straight from the chain: 🐋 whale holds at least 1% of supply, 💎 diamond hands never sent tokens anywhere except to a burn address, 🔥 burner sent some to `0x0…dEaD` or `0x0`. Addresses with contract code (the bonding curve, the graduated pool, vaults) aren't ranked. The top 50 is edge-cached for a minute; `?me=0x…` adds the connected wallet's own rank.
+
+### Terminal
+
+`/terminal` swaps Zoza tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 0.01 eth to zoza`, `buy zoza with 0.01 eth`, `swap 1m zoza to eth`, `sell 50% zoza`, `sell all zoza`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker, name or address against the shared launch list (`zoza` is always the official token). Every swap is quoted from the token's bonding curve first, needs a `y` to go ahead, and then runs through the same `trade()` as the token page (approve-then-sell for sells, 5% slippage). Graduated tokens are pointed to their token page.
 
 ### Claiming creator fees
 

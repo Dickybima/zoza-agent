@@ -35,7 +35,7 @@ export function SiteHeader() {
           ZOZA
         </Link>
 
-        <nav className="ml-6 hidden items-center gap-1 text-[13px] text-muted-foreground lg:flex">
+        <nav className="ml-6 hidden items-center gap-1 whitespace-nowrap text-[13px] text-muted-foreground xl:flex">
           {PAGES.map((l) => {
             const active = isActive(pathname, l.href);
             return (
@@ -60,7 +60,7 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="xl:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
@@ -70,7 +70,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-      <nav className={cn("border-t border-border bg-background lg:hidden", open ? "block" : "hidden")}>
+      <nav className={cn("border-t border-border bg-background xl:hidden", open ? "block" : "hidden")}>
         {PAGES.map((l) => {
           const active = isActive(pathname, l.href);
           return (
