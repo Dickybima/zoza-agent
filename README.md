@@ -20,7 +20,7 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal, portfolio
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
@@ -61,6 +61,10 @@ Uploads need a Blob store connected to the Vercel project: Storage → Create �
 ### $ZOZA holder leaderboard
 
 The home page ranks $ZOZA holders (`components/site/holder-board.tsx`). `api/holders.mjs` replays every `Transfer` of the token since its launch block (found from the factory's `TokenLaunched` event), so balances and badges come straight from the chain: 🐋 whale holds at least 1% of supply, 💎 diamond hands never sent tokens anywhere except to a burn address, 🔥 burner sent some to `0x0…dEaD` or `0x0`. Addresses with contract code (the bonding curve, the graduated pool, vaults) aren't ranked. The top 50 is edge-cached for a minute; `?me=0x…` adds the connected wallet's own rank.
+
+### Portfolio
+
+`/portfolio` (`lib/portfolio.ts`) reads the connected wallet from Robinhood Chain: its ETH, its balance of every Zoza token (the official $ZOZA plus the shared launch list), each valued at its bonding curve's spot price with the "exit" value of selling it all into the curve after fees, its claimable creator fees from the fee escrow, and its $ZOZA leaderboard rank. Net worth, an allocation bar and a holdings table refresh every 30 s. Graduated tokens are listed but not priced.
 
 ### Terminal
 

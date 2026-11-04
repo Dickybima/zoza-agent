@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CopyIcon, LogOutIcon, MenuIcon, RefreshCwIcon, WalletIcon, XIcon } from "lucide-react";
+import { BriefcaseIcon, CopyIcon, LogOutIcon, MenuIcon, RefreshCwIcon, WalletIcon, XIcon } from "lucide-react";
 
 import { shortAddr } from "@/lib/agent";
 import { PAGES, isActive } from "@/lib/nav";
@@ -130,6 +130,11 @@ function WalletButton() {
           <span className="text-sm">{shortAddr(address)}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/portfolio">
+            <BriefcaseIcon /> Portfolio
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={(e) => (e.preventDefault(), copy())}>
           <CopyIcon /> {copied ? "Copied ✓" : "Copy address"}
         </DropdownMenuItem>

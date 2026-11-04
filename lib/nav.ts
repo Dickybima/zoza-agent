@@ -10,6 +10,7 @@ export const PAGES: NavPage[] = [
   { href: "/tokenize", label: "Tokenize", index: "06", blurb: "Turn a fomo or pump.fun profile into a token." },
   { href: "/claim", label: "Claim", index: "07", blurb: "Collect the creator fees your tokens earned." },
   { href: "/terminal", label: "Terminal", index: "08", blurb: "Swap any Zoza token by just saying it." },
+  { href: "/portfolio", label: "Portfolio", index: "09", blurb: "Everything your wallet holds across Zoza." },
 ];
 
 /** true when `pathname` is `href` or below it (trailing slash tolerant) */
