@@ -10,6 +10,7 @@ import { claimableBalance, feeEscrowAddress } from "@/lib/fees";
 import { useAllLaunches } from "@/lib/launches";
 import { OFFICIAL_ADDRESS } from "@/lib/official";
 import { readClient } from "@/lib/rpc";
+import { pageHidden } from "@/lib/visible";
 
 const REFRESH_MS = 30_000;
 const BATCH = 8;
@@ -71,6 +72,7 @@ export function usePortfolio(wallet: string | null) {
     let live = true;
     const account = getAddress(wallet.toLowerCase());
     const t = setTimeout(async () => {
+      if (tick > 0 && pageHidden()) return;
       setStatus((s) => (s === "ok" ? s : "loading"));
       try {
         const client = readClient();

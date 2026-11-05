@@ -22,14 +22,20 @@ const ALLOWED = new Set([
 ]);
 const MAX_BATCH = 20;
 
+// Reads may also come as GET /api/rpc?b=<base64url JSON>, which Vercel's edge
+// caches for a few seconds: visitors asking for the same thing at the same
+// moment (the ticker, the burn tracker, a token page) then share one call.
+const GET_CACHE = "public, s-maxage=4, stale-while-revalidate=10";
+
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "POST only" });
+  if (req.method !== "POST" && req.method !== "GET") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ error: "GET or POST only" });
   }
-  let body = req.body;
+  let body = req.method === "GET" ? String(req.query.b || "") : req.body;
   try {
-    if (typeof body === "string") body = JSON.parse(body);
+    if (req.method === "GET") body = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    else if (typeof body === "string") body = JSON.parse(body);
   } catch {
     return res.status(400).json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
   }
@@ -46,7 +52,7 @@ module.exports = async function handler(req, res) {
     });
     const text = await upstream.text();
     res.setHeader("content-type", "application/json");
-    res.setHeader("cache-control", "no-store");
+    res.setHeader("cache-control", req.method === "GET" && upstream.ok ? GET_CACHE : "no-store");
     return res.status(upstream.status).send(text);
   } catch {
     return res.status(502).json({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Robinhood Chain RPC unavailable" } });

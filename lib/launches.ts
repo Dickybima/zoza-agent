@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { LaunchedToken } from "@/lib/agent";
 import { useTokens } from "@/lib/tokens";
+import { pageHidden } from "@/lib/visible";
 
 const REFRESH_MS = 60_000;
 
@@ -20,11 +21,14 @@ export function useAllLaunches() {
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let loaded = false;
     const load = async () => {
       try {
+        if (loaded && pageHidden()) return;
         const r = await fetch("/api/launches");
         if (!r.ok) throw new Error(String(r.status));
         const data = (await r.json()) as { tokens: LaunchedToken[] };
+        loaded = true;
         if (live) {
           setRemote(Array.isArray(data.tokens) ? data.tokens : []);
           setStatus("ok");

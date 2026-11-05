@@ -14,6 +14,7 @@ import type { CurveState, TokenInfo, Trade } from "@/lib/curve";
 import { fmtEth, fmtPrice, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
 import { useEthUsd } from "@/hooks/use-eth-usd";
 import { readClient } from "@/lib/rpc";
+import { pageHidden } from "@/lib/visible";
 import type { ChainError } from "@/lib/rpc";
 import { useTokens } from "@/lib/tokens";
 import { useWallet } from "@/lib/wallet";
@@ -31,7 +32,7 @@ const INTERVALS = [
   { label: "15m", sec: 900 },
   { label: "1h", sec: 3600 },
 ];
-const POLL_MS = 8_000;
+const POLL_MS = 15_000;
 const FALLBACK_LOOKBACK = BigInt(200_000);
 
 /** Closing price per time bucket, scaled by `rate` (ETH → USD). */
@@ -110,7 +111,7 @@ export function TokenView() {
 
   useEffect(() => {
     if (!data) return;
-    const id = setInterval(refresh, POLL_MS);
+    const id = setInterval(() => !pageHidden() && refresh(), POLL_MS);
     return () => clearInterval(id);
   }, [data, refresh]);
 
@@ -300,7 +301,7 @@ function TradePanel({
 
   useEffect(() => {
     const first = setTimeout(loadBalances, 0);
-    const id = setInterval(loadBalances, POLL_MS);
+    const id = setInterval(() => !pageHidden() && loadBalances(), POLL_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);

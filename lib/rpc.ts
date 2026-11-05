@@ -39,17 +39,27 @@ type RpcFailure = Error & { code?: number; data?: unknown };
 const rpcError = (e: { code?: number; message?: string; data?: unknown }): RpcFailure =>
   Object.assign(new Error(e.message ?? "RPC error"), { code: e.code, data: e.data });
 
-/** A JSON-RPC endpoint reached over fetch. */
-function httpSource(name: string, url: string): RpcSource {
+/** base64url of a UTF-8 string, for cacheable GET requests to the proxy. */
+const b64url = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+/**
+ * A JSON-RPC endpoint reached over fetch. With `cacheableGet`, small requests
+ * go out as GET with a fixed id so identical reads share the edge cache.
+ */
+function httpSource(name: string, url: string, cacheableGet = false): RpcSource {
   let id = 0;
   return {
     name,
     async request({ method, params }) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params: params ?? [] }),
-      });
+      const fixed = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: params ?? [] });
+      const res =
+        cacheableGet && fixed.length < 1500
+          ? await fetch(`${url}?b=${b64url(fixed)}`)
+          : await fetch(url, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params: params ?? [] }),
+            });
       if (!res.ok && res.status !== 400) throw rpcError({ message: `${name}: HTTP ${res.status}` });
       const json = await res.json();
       if (json.error) throw rpcError(json.error);
@@ -59,24 +69,56 @@ function httpSource(name: string, url: string): RpcSource {
 }
 
 /**
- * Read transport that asks every source at once — Zoza's same-origin proxy
- * (api/rpc.js), Robinhood Chain's public RPC and, when connected, the
- * wallet's own RPC — and takes the first answer, so one blocked,
- * rate-limited or hanging endpoint cannot stall the app. When every source
- * fails, the most informative error wins (a revert carries data viem decodes
- * into a readable reason).
+ * Read transport: asks the direct sources first (Robinhood Chain's public RPC
+ * and, when connected, the wallet's own RPC) and takes the first answer. Zoza's
+ * same-origin proxy (api/rpc.js) is only a fallback, joining when the direct
+ * sources fail or haven't answered within HEDGE_MS, since every proxied read is
+ * a billed serverless call. A public RPC the browser can't reach (CORS, blocked
+ * network) is skipped for a while so later reads go straight to the proxy.
+ * When every source fails, the most informative error wins (a revert carries
+ * data viem decodes into a readable reason).
  */
-function racingReads(sources: RpcSource[], timeoutMs = 20_000) {
+const HEDGE_MS = 3_000;
+const DIRECT_COOLDOWN_MS = 60_000;
+let directDownUntil = 0;
+const isNetworkFailure = (e: RpcFailure) => e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(e.message);
+
+function hedgedReads(direct: RpcSource[], fallback: RpcSource, timeoutMs = 20_000) {
   return custom(
     {
       async request(req: RpcRequest) {
-        const attempts = sources.map((s) => withTimeout(s.request(req), timeoutMs, `${s.name}: no response`));
+        const errors: RpcFailure[] = [];
+        const ask = (s: RpcSource) =>
+          withTimeout(s.request(req), timeoutMs, `${s.name}: no response`).catch((e: RpcFailure) => {
+            errors.push(e);
+            throw e;
+          });
+        let proxied: Promise<unknown> | undefined;
+        const proxy = () => (proxied ??= ask(fallback));
+        const skipDirect = Date.now() < directDownUntil;
+        let hedge: ReturnType<typeof setTimeout> | undefined;
         try {
-          return await Promise.any(attempts);
-        } catch (agg) {
-          const errors = ((agg as AggregateError).errors ?? []) as RpcFailure[];
+          if (skipDirect) return await proxy();
+          const directAny = Promise.any(direct.map(ask));
+          // the proxy joins if the direct sources all fail, or are still silent after HEDGE_MS
+          const backup = new Promise((resolve, reject) => {
+            hedge = setTimeout(() => proxy().then(resolve, reject), HEDGE_MS);
+            directAny.catch((agg: AggregateError) => {
+              clearTimeout(hedge);
+              // a revert is the chain's real answer; asking the proxy would only repeat it
+              const revert = errors.find((e) => e.data || /revert/i.test(e.message));
+              if (revert) return reject(agg);
+              // unreachable (CORS, blocked network) rather than a revert: skip it for a while
+              if (errors.some(isNetworkFailure)) directDownUntil = Date.now() + DIRECT_COOLDOWN_MS;
+              proxy().then(resolve, reject);
+            });
+          });
+          return await Promise.any([directAny, backup]);
+        } catch {
           console.warn(`[zoza] ${req.method} failed on every RPC source`, errors);
-          throw errors.find((e) => e.data || /revert/i.test(e.message)) ?? errors[0] ?? agg;
+          throw errors.find((e) => e.data || /revert/i.test(e.message)) ?? errors[0] ?? new Error("RPC error");
+        } finally {
+          clearTimeout(hedge);
         }
       },
     },
@@ -86,11 +128,11 @@ function racingReads(sources: RpcSource[], timeoutMs = 20_000) {
 
 /** Public client for chain reads; pass the wallet's provider to add it as a source. */
 export function readClient(provider?: EIP1193Provider | null) {
-  const sources: RpcSource[] = [httpSource("zoza-proxy", "/api/rpc"), httpSource("public-rpc", RPC_URL)];
+  const direct: RpcSource[] = [httpSource("public-rpc", RPC_URL)];
   if (provider) {
-    sources.push({ name: "wallet", request: (req) => provider.request(req as Parameters<EIP1193Provider["request"]>[0]) });
+    direct.push({ name: "wallet", request: (req) => provider.request(req as Parameters<EIP1193Provider["request"]>[0]) });
   }
-  return createPublicClient({ chain: robinhoodChain, transport: racingReads(sources), pollingInterval: 2_000 });
+  return createPublicClient({ chain: robinhoodChain, transport: hedgedReads(direct, httpSource("zoza-proxy", "/api/rpc", true)), pollingInterval: 2_000 });
 }
 
 export const WRONG_NETWORK =

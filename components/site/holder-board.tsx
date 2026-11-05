@@ -8,6 +8,7 @@ import { shortAddr } from "@/lib/agent";
 import { EXPLORER } from "@/lib/chain";
 import { fmtTokens } from "@/lib/format";
 import { OFFICIAL_ADDRESS } from "@/lib/official";
+import { pageHidden } from "@/lib/visible";
 import { useWallet } from "@/lib/wallet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,11 +29,14 @@ export function HolderBoard() {
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let loaded = false;
     const load = async () => {
       try {
+        if (loaded && pageHidden()) return;
         const r = await fetch(`/api/holders${address ? `?me=${address}` : ""}`);
         if (!r.ok) throw new Error(String(r.status));
         const data = (await r.json()) as Board;
+        loaded = true;
         if (live) {
           setBoard(data);
           setStatus("ok");

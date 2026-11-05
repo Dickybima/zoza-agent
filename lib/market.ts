@@ -5,6 +5,7 @@ import type { Address } from "viem";
 
 import { fetchCurve, fetchTokenInfo, spotPrice } from "@/lib/curve";
 import { readClient } from "@/lib/rpc";
+import { pageHidden } from "@/lib/visible";
 
 const POLL_MS = 30_000;
 
@@ -24,10 +25,13 @@ export function useMarket(token: Address) {
     let live = true;
     let curve: Address | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let loaded = false;
     const refresh = async () => {
       try {
+        if (loaded && pageHidden()) return;
         curve ??= (await fetchTokenInfo(client, token)).curve;
         const [state, head] = await Promise.all([fetchCurve(client, curve), client.getBlockNumber()]);
+        loaded = true;
         if (live) setMarket({ priceEth: spotPrice(state), graduated: state.graduated, head });
       } catch {
         // keep the last reading; the ticker shows placeholders until one arrives

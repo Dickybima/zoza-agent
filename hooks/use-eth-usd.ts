@@ -36,7 +36,7 @@ export function useEthUsd() {
     let alive = true;
     const load = () => fetchEthUsd().then((v) => alive && v && setUsd(v));
     const first = setTimeout(load, 0);
-    const id = setInterval(load, MAX_AGE);
+    const id = setInterval(() => document.visibilityState !== "hidden" && load(), MAX_AGE);
     return () => {
       alive = false;
       clearTimeout(first);

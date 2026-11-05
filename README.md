@@ -44,7 +44,7 @@ Once the blueprint is complete, **Launch** sends a real transaction from the con
 3. `launchToken` is simulated, then sent for the user to confirm in their wallet, paying `launchFee` — the creator tax is 2% (`creatorTaxBps = 200`) paid to the creator's wallet;
 4. the `TokenLaunched` event gives the token address, the token is added to **Explore** and the user is taken there.
 
-Chain reads race three sources and take the first answer: the same-origin proxy `api/rpc.js` (a Vercel Serverless Function forwarding read-only JSON-RPC methods to `rpc.mainnet.chain.robinhood.com`, so browsers are not blocked by CORS or the wallet's RPC), the public RPC directly, and the wallet's RPC.
+Chain reads go to Robinhood Chain's public RPC (and the wallet's RPC when connected) first. The same-origin proxy `api/rpc.js` (a Vercel Serverless Function forwarding read-only JSON-RPC methods to `rpc.mainnet.chain.robinhood.com`) is only a fallback: it joins when the direct sources fail or stay silent for 3 s, and takes over for a minute when the browser can't reach the public RPC at all. Small proxied reads go out as `GET /api/rpc?b=…` with a fixed id, which the edge caches for 4 s so concurrent visitors share one call. Polls (ticker, burn tracker, leaderboard, token pages, portfolio) skip their reads while the tab is in the background, and the burn stats are one shared poller. All of this keeps serverless usage inside Vercel's Hobby limits.
 
 See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `contractsV2/src/v2/PonsV2LaunchFactory.sol`) and `lib/chain.ts` (RPC, explorer). Verify the factory address on the explorer before relying on it.
 
