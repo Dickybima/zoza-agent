@@ -7,8 +7,9 @@ import type { Address } from "viem";
 
 import { shortAddr } from "@/lib/agent";
 import { explorerTx } from "@/lib/chain";
-import { fetchCurve, fetchTokenInfo, launchedTokenAbi, minOut, quoteBuy, quoteSell, spotPrice, trade } from "@/lib/curve";
-import type { CurveState, TokenInfo } from "@/lib/curve";
+import { fetchPool, fetchTokenInfo, minOut, montraToken, quote, trade } from "@/lib/montra";
+import type { PoolState, TokenInfo } from "@/lib/montra";
+import { montraTokenAbi } from "@/lib/montra-abi";
 import { fmtEth, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
 import { useAllLaunches } from "@/lib/launches";
 import { readClient } from "@/lib/rpc";
@@ -21,7 +22,7 @@ import { useEthUsd } from "@/hooks/use-eth-usd";
 
 type Kind = "in" | "out" | "ok" | "err" | "dim" | "hl" | "art";
 type Line = { id: number; kind: Kind; text: string; href?: string };
-type Pending = { token: TokenInfo; order: Parameters<typeof trade>[4]; summary: string };
+type Pending = { token: TokenInfo; order: Parameters<typeof trade>[3]; summary: string };
 
 const SLIPPAGE_BPS = 500;
 const ZERO = BigInt(0);
@@ -37,7 +38,7 @@ const HELP: [string, string][] = [
   ["buy test with 1 hype", "same thing, said differently"],
   ["swap 1m test to hype", "sell an amount (k / m / b work)"],
   ["sell 50% test  ·  sell all test", "sell part or all of your bag"],
-  ["price test", "price, market cap, curve progress"],
+  ["price test", "price, market cap, graduation progress"],
   ["balance  ·  balance test", "your HYPE and token balances"],
   ["tokens", "every token you can trade here"],
   ["connect  ·  clear", "connect a wallet  ·  wipe the screen"],
@@ -83,9 +84,8 @@ export function Terminal() {
     const address = resolve(q);
     if (!address) throw new Error(`No Zoza token called "${q}". Type tokens to see the list, or paste a contract address.`);
     const client = readClient();
-    const token = await fetchTokenInfo(client, address);
-    const curve = await fetchCurve(client, token.curve);
-    return { client, token, curve };
+    const [token, pool] = await Promise.all([fetchTokenInfo(client, address), fetchPool(client, address)]);
+    return { client, token, pool };
   };
 
   const needWallet = async () => {
@@ -95,18 +95,17 @@ export function Terminal() {
     return { wallet: getAddress(wallet.toLowerCase()), provider };
   };
 
-  const graduatedNote = (t: TokenInfo) =>
-    line("err", `$${t.symbol} has left its bonding curve, so it no longer trades here.`);
-
-  const priceLines = (t: TokenInfo, c: CurveState) => {
-    const p = spotPrice(c);
-    // share of the supply bought out of the curve
-    const pct = t.totalSupply > ZERO ? Math.min(100, Math.max(0, (1 - Number(formatEther(c.tokenReserve)) / Number(formatEther(t.totalSupply))) * 100)) : 0;
+  const priceLines = (t: TokenInfo, c: PoolState) => {
+    const p = c.price;
+    const pct = c.stage >= 2 ? 100 : Math.min(100, c.graduationBps / 100);
+    const mcap = p * Number(formatUnits(t.totalSupply, 18));
     return [
       line("hl", `${t.name} ($${t.symbol})  ·  ${shortAddr(t.address)}`),
       line("out", `  price      ${ethUsd ? fmtUsdPrice(p * ethUsd) : `${p.toExponential(3)} HYPE`}`),
-      line("out", `  mcap       ${usd(p * Number(formatUnits(t.totalSupply, 18))) ?? "—"}`),
-      line("out", `  curve      ${"█".repeat(Math.round(pct / 5)).padEnd(20, "░")} ${pct.toFixed(1)}%${c.graduated ? "  (graduated)" : ""}`),
+      line("out", `  mcap       ${usd(mcap) ?? `${mcap.toFixed(2)} HYPE`}`),
+      line("out", `  graduation ${"█".repeat(Math.round(pct / 5)).padEnd(20, "░")} ${pct.toFixed(1)}%${c.stage >= 2 ? "  (graduated)" : ""}`),
+      line("out", `  fee        ${c.feePips / 10_000}% per trade${c.buyFeePips > c.feePips ? ` (buys pay ${c.buyFeePips / 10_000}% right now)` : ""}`),
+      line("dim", `  montra     ${montraToken(t.address)}`),
     ];
   };
 
@@ -130,9 +129,9 @@ export function Terminal() {
         return;
       }
       case "price": {
-        print(line("dim", "› reading the curve…"));
-        const { token, curve } = await load(cmd.token);
-        print(...priceLines(token, curve));
+        print(line("dim", "› reading the pool…"));
+        const { token, pool } = await load(cmd.token);
+        print(...priceLines(token, pool));
         return;
       }
       case "balance": {
@@ -142,7 +141,7 @@ export function Terminal() {
         print(line("hl", `wallet ${shortAddr(wallet)}`), line("out", `  HYPE       ${fmtEth(eth)}${usd(Number(formatEther(eth))) ? `  (${usd(Number(formatEther(eth)))})` : ""}`));
         if (cmd.token) {
           const { token } = await load(cmd.token);
-          const bal = await client.readContract({ address: token.address, abi: launchedTokenAbi, functionName: "balanceOf", args: [wallet] });
+          const bal = await client.readContract({ address: token.address, abi: montraTokenAbi, functionName: "balanceOf", args: [wallet] });
           print(line("out", `  $${token.symbol.padEnd(9)} ${fmtTokens(bal)}`));
         }
         return;
@@ -151,33 +150,31 @@ export function Terminal() {
         const ethIn = parseEther(cmd.eth);
         if (ethIn <= ZERO) throw new Error("Spend more than 0 HYPE.");
         print(line("dim", "› quoting…"));
-        const { token, curve } = await load(cmd.token);
-        if (curve.graduated) return print(graduatedNote(token));
-        const out = quoteBuy(curve, ethIn);
-        if (out <= ZERO) throw new Error("The curve can’t fill that buy right now.");
+        const { client, token, pool } = await load(cmd.token);
+        const out = await quote(client, pool, "buy", ethIn);
+        if (out <= ZERO) throw new Error("The pool can’t fill that buy right now.");
         const summary = `swap ${fmtEth(ethIn)} HYPE → ~${fmtTokens(out)} $${token.symbol}`;
         print(
           line("hl", summary),
           line("out", `  you pay       ${fmtEth(ethIn)} HYPE${usd(Number(cmd.eth)) ? `  (${usd(Number(cmd.eth))})` : ""}`),
           line("out", `  you receive   ~${fmtTokens(out)} $${token.symbol}`),
           line("out", `  min received  ${fmtTokens(minOut(out, SLIPPAGE_BPS))} (5% slippage)`),
-          line("out", `  fees          ${Number(curve.feeBps + curve.taxBps) / 100}% (incl. ${Number(curve.taxBps) / 100}% to the creator)`),
+          line("out", `  fee           ${pool.buyFeePips / 10_000}% (included above)`),
           line("ok", "confirm swap? [y/N]"),
         );
-        setPending({ token, summary, order: { kind: "buy", ethIn, minTokens: minOut(out, SLIPPAGE_BPS) } });
+        setPending({ token, summary, order: { kind: "buy", hypeIn: ethIn, minTokens: minOut(out, SLIPPAGE_BPS) } });
         return;
       }
       case "sell": {
         const { wallet } = await needWallet();
         print(line("dim", "› quoting…"));
-        const { client, token, curve } = await load(cmd.token);
-        if (curve.graduated) return print(graduatedNote(token));
-        const bal = await client.readContract({ address: token.address, abi: launchedTokenAbi, functionName: "balanceOf", args: [wallet] });
+        const { client, token, pool } = await load(cmd.token);
+        const bal = await client.readContract({ address: token.address, abi: montraTokenAbi, functionName: "balanceOf", args: [wallet] });
         if (bal <= ZERO) throw new Error(`You don’t hold any $${token.symbol}.`);
         const amount = cmd.amount.type === "pct" ? (bal * BigInt(Math.round(cmd.amount.pct * 100))) / BigInt(10_000) : parseUnits(cmd.amount.value, 18);
         if (amount <= ZERO) throw new Error("Sell more than 0.");
         if (amount > bal) throw new Error(`You only hold ${fmtTokens(bal)} $${token.symbol}.`);
-        const out = quoteSell(curve, amount);
+        const out = await quote(client, pool, "sell", amount);
         const summary = `swap ${fmtTokens(amount)} $${token.symbol} → ~${fmtEth(out)} HYPE`;
         print(
           line("hl", summary),
@@ -187,7 +184,7 @@ export function Terminal() {
           line("dim", "  selling may ask for one approval first"),
           line("ok", "confirm swap? [y/N]"),
         );
-        setPending({ token, summary, order: { kind: "sell", tokensIn: amount, minEth: minOut(out, SLIPPAGE_BPS) } });
+        setPending({ token, summary, order: { kind: "sell", tokensIn: amount, minHype: minOut(out, SLIPPAGE_BPS) } });
         return;
       }
       case "error":
@@ -197,9 +194,9 @@ export function Terminal() {
 
   const confirm = async (p: Pending) => {
     const { wallet, provider } = await needWallet();
-    const { hash } = await trade(provider, wallet, p.token.curve, p.token.address, p.order, (s) => print(line("dim", `› ${s}…`)));
+    const { hash } = await trade(provider, wallet, p.token.address, p.order, (s) => print(line("dim", `› ${s}…`)));
     print(line("ok", `✓ done: ${p.summary.replace("~", "")}`), line("ok", `  view transaction ↗`, explorerTx(hash)));
-    const bal = await readClient().readContract({ address: p.token.address, abi: launchedTokenAbi, functionName: "balanceOf", args: [wallet] });
+    const bal = await readClient().readContract({ address: p.token.address, abi: montraTokenAbi, functionName: "balanceOf", args: [wallet] });
     print(line("out", `  you now hold ${fmtTokens(bal)} $${p.token.symbol}`), line("dim", ""));
   };
 
@@ -256,7 +253,7 @@ export function Terminal() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">Just say the swap.</h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Type what you want in plain words. Zoza quotes it from the bonding curve, you confirm, your wallet signs.
+          Type what you want in plain words. Zoza quotes it from the token’s Montra pool, you confirm, your wallet signs.
         </p>
       </div>
 
@@ -334,7 +331,7 @@ export function Terminal() {
         ))}
       </div>
       <p className="mt-4 text-[11px] text-muted-foreground">
-        Swaps run on each token’s bonding curve with 5% slippage protection. Every swap is shown before it’s sent and signed in your
+        Swaps run in each token’s Montra pool (Uniswap v4) with 5% slippage protection. Every swap is shown before it’s sent and signed in your
         own wallet.
       </p>
     </div>

@@ -108,7 +108,7 @@ export function Portfolio() {
         {data?.holdings.length ? (
           <ul className="divide-y divide-dashed divide-border">
             {data.holdings.map((h) => {
-              const graduated = h.state?.graduated;
+              const graduated = h.graduated;
               return (
                 <li key={h.token} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-4 md:grid-cols-[1fr_9rem_8rem_9rem_7rem]">
                   <Link href={`/token?address=${h.token}`} className="flex min-w-0 items-center gap-3 hover:text-signal">
@@ -119,19 +119,19 @@ export function Portfolio() {
                         {h.mine ? <Badge variant="signal">yours</Badge> : null}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        ${h.symbol} · {graduated ? "graduated" : "bonding curve"}
+                        ${h.symbol} · {graduated ? "graduated" : "Montra pool"}
                       </span>
                     </span>
                   </Link>
                   <span className="text-right text-sm tabular-nums md:order-none">{fmtTokens(h.balance)}</span>
                   <span className="hidden text-right text-sm tabular-nums text-muted-foreground md:block">
-                    {graduated ? "—" : ethUsd ? fmtUsdPrice(h.priceEth * ethUsd) : "···"}
+                    {ethUsd ? fmtUsdPrice(h.priceEth * ethUsd) : `${h.priceEth.toExponential(2)} HYPE`}
                   </span>
                   <span className="text-right md:text-right">
-                    <span className="block text-sm font-semibold tabular-nums">{graduated ? "—" : usd(h.valueEth) ?? `${h.valueEth.toFixed(5)} HYPE`}</span>
-                    {!graduated && totalEth > 0 ? (
+                    <span className="block text-sm font-semibold tabular-nums">{usd(h.valueEth) ?? `${h.valueEth.toFixed(5)} HYPE`}</span>
+                    {totalEth > 0 ? (
                       <span className="block text-[11px] text-muted-foreground">
-                        {((h.valueEth / totalEth) * 100).toFixed(1)}% · exit ≈ {fmtEth(h.exitEth)} HYPE
+                        {((h.valueEth / totalEth) * 100).toFixed(1)}%{h.exitEth !== null ? ` · exit ≈ ${fmtEth(h.exitEth)} HYPE` : ""}
                       </span>
                     ) : null}
                   </span>
@@ -156,7 +156,7 @@ export function Portfolio() {
               "Elysium didn’t answer. Retrying shortly…"
             ) : (
               <>
-                <p>No Zoza tokens in this wallet yet.</p>
+                <p>No Montra tokens in this wallet yet.</p>
                 <div className="mt-5 flex justify-center gap-2">
                   <Button variant="signal" size="sm" asChild>
                     <Link href="/terminal">Swap in the terminal</Link>
@@ -172,8 +172,8 @@ export function Portfolio() {
       </div>
 
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-        Values use each token’s bonding-curve spot price; “exit” is what selling the whole bag into the curve would return now, after
-        fees. Refreshes every 30 seconds.
+        Holdings and values come from Montra’s indexer at each pool’s price; “exit” is what selling the whole bag into its pool would
+        return now, after fees, quoted on-chain. Claimable fees are what your tokens’ pools hold for you. Refreshes every 30 seconds.
       </p>
     </Section>
   );

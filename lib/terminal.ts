@@ -1,5 +1,5 @@
-// Command parser for the Zoza terminal. Swaps go through a token's bonding
-// curve, so one side of every swap is HYPE:
+// Command parser for the Zoza terminal. Swaps go through a token's Montra pool
+// (Uniswap v4, paired with HYPE), so one side of every swap is HYPE:
 //   swap 1 hype to test      buy 1 hype of test      buy test with 1 hype
 //   swap 1m test to hype        sell 50% test             sell all $test
 // plus price, balance, tokens, connect, help and clear.

@@ -8,9 +8,12 @@ import { formatEther, isAddress, parseEther } from "viem";
 import type { Address } from "viem";
 
 import { shortAddr, timeAgo } from "@/lib/agent";
-import { explorerToken, explorerTx, EXPLORER } from "@/lib/chain";
-import { fetchCurve, fetchTokenInfo, fetchTrades, findLaunchBlock, minOut, quoteBuy, quoteSell, spotPrice, trade, launchedTokenAbi } from "@/lib/curve";
-import type { CurveState, TokenInfo, Trade } from "@/lib/curve";
+import { explorerTx, EXPLORER } from "@/lib/chain";
+import { fetchTrades } from "@/lib/curve";
+import type { Trade } from "@/lib/curve";
+import { fetchPool, fetchTokenInfo, minOut, montraApi, montraToken, quote, trade } from "@/lib/montra";
+import { montraTokenAbi } from "@/lib/montra-abi";
+import type { PoolState, TokenInfo } from "@/lib/montra";
 import { fmtEth, fmtPrice, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
 import { useEthUsd } from "@/hooks/use-eth-usd";
 import { readClient } from "@/lib/rpc";
@@ -32,7 +35,6 @@ const INTERVALS = [
   { label: "1h", sec: 3600 },
 ];
 const POLL_MS = 15_000;
-const FALLBACK_LOOKBACK = BigInt(200_000);
 
 /** Closing price per time bucket, scaled by `rate` (HYPE → USD). */
 function buildLine(trades: Trade[], sec: number, rate: number): PricePoint[] {
@@ -48,7 +50,15 @@ function buildLine(trades: Trade[], sec: number, rate: number): PricePoint[] {
   return out;
 }
 
-type Loaded = { info: TokenInfo; curve: CurveState; trades: Trade[]; head: bigint };
+type Market = { holders: number; volume24h: bigint } | null;
+type Loaded = { info: TokenInfo; pool: PoolState; trades: Trade[]; market: Market };
+
+/** Holders and 24h volume from Montra's indexer (best effort). */
+const readMarket = (token: Address): Promise<Market> =>
+  montraApi
+    .token(token)
+    .then((c) => ({ holders: c.holders, volume24h: BigInt(c.volume24h || "0") }))
+    .catch(() => null);
 
 export function TokenView() {
   const params = useSearchParams();
@@ -56,8 +66,6 @@ export function TokenView() {
   const address = isAddress(raw) ? (raw as Address) : null;
   const { tokens } = useTokens();
   const local = useMemo(() => tokens.find((t) => t.address.toLowerCase() === raw.toLowerCase()), [tokens, raw]);
-  const blockParam = params.get("block");
-  const knownBlock = blockParam && /^\d+$/.test(blockParam) ? BigInt(blockParam) : local?.block ? BigInt(local.block) : null;
 
   const client = useMemo(() => readClient(), []);
   const [data, setData] = useState<Loaded | null>(null);
@@ -68,41 +76,36 @@ export function TokenView() {
     dataRef.current = data;
   }, [data]);
 
-  // initial load: token metadata, curve state and the full trade history
+  // initial load: token metadata and its pool from chain, trades from Montra's indexer
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
     (async () => {
       try {
-        const info = await fetchTokenInfo(client, address);
-        const [curve, head] = await Promise.all([fetchCurve(client, info.curve), client.getBlockNumber()]);
-        const from =
-          knownBlock ?? (await findLaunchBlock(client, address).catch(() => null)) ?? (head > FALLBACK_LOOKBACK ? head - FALLBACK_LOOKBACK : BigInt(0));
-        const trades = await fetchTrades(client, info.curve, from, head);
-        if (!cancelled) setData({ info, curve, trades, head });
+        const [info, pool] = await Promise.all([fetchTokenInfo(client, address), fetchPool(client, address)]);
+        const [trades, market] = await Promise.all([fetchTrades(address).catch(() => [] as Trade[]), readMarket(address)]);
+        if (!cancelled) setData({ info, pool, trades, market });
       } catch (err) {
         console.warn("[zoza] token load failed", err);
-        if (!cancelled) setError("Couldn’t load this token from Elysium. Check the address, then refresh to try again.");
+        if (!cancelled) setError((err as Error).message?.includes("Montra") ? (err as Error).message : "Couldn’t load this token from Elysium. Check the address, then refresh to try again.");
       }
     })();
     return () => {
       cancelled = true;
     };
-    // knownBlock only matters for the first load
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, client]);
 
-  /** Pulls new trades since the last seen block and the current curve state. */
+  /** Re-reads the pool and the latest trades. */
   const refresh = useCallback(async () => {
     const d = dataRef.current;
     if (!d) return;
     try {
-      const head = await client.getBlockNumber();
-      const [curve, fresh] = await Promise.all([
-        fetchCurve(client, d.info.curve),
-        fetchTrades(client, d.info.curve, d.head + BigInt(1), head),
+      const [pool, trades, market] = await Promise.all([
+        fetchPool(client, d.info.address),
+        fetchTrades(d.info.address).catch(() => null),
+        readMarket(d.info.address),
       ]);
-      setData((prev) => (prev ? { ...prev, curve, head, trades: fresh.length ? [...prev.trades, ...fresh] : prev.trades } : prev));
+      setData((prev) => (prev ? { ...prev, pool, trades: trades ?? prev.trades, market: market ?? prev.market } : prev));
     } catch (err) {
       console.warn("[zoza] token refresh failed", err);
     }
@@ -132,11 +135,12 @@ export function TokenView() {
     );
   }
 
-  const { info, curve, trades } = data;
-  const price = spotPrice(curve);
+  const { info, pool, trades, market } = data;
+  const price = pool.price;
   const mcap = price * Number(formatEther(info.totalSupply));
-  // share of the supply bought out of the curve (Zoza curves never migrate, so this is the curve's own fill)
-  const progress = info.totalSupply > BigInt(0) ? Math.min(1, Math.max(0, 1 - Number(formatEther(curve.tokenReserve)) / Number(formatEther(info.totalSupply)))) : 0;
+  const graduated = pool.stage >= 2;
+  // Montra's graduation line: a line in the pool, nothing migrates when it passes
+  const progress = graduated ? 1 : Math.min(1, pool.graduationBps / 10_000);
   const logo = info.logo || local?.logo;
   const lastTrade = trades[trades.length - 1];
   const firstPrice = trades[0]?.price;
@@ -154,7 +158,7 @@ export function TokenView() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{info.name}</h1>
-            <Badge variant={curve.graduated ? "signal" : "outline"}>{curve.graduated ? "Graduated" : "Bonding curve"}</Badge>
+            <Badge variant={graduated ? "signal" : "outline"}>{graduated ? "Graduated" : "Montra pool"}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">${info.symbol}</p>
         </div>
@@ -204,15 +208,15 @@ export function TokenView() {
 
           {/* stats */}
           <dl className="grid grid-cols-2 border border-border sm:grid-cols-4">
-            <Stat label="liquidity" value={fmtV(Number(formatEther(curve.realQuote)))} />
-            <Stat label="trades" value={String(trades.length)} />
-            <Stat label="base fee" value={`${Number(curve.feeBps) / 100}%`} />
-            <Stat label="creator tax" value={`${Number(curve.taxBps) / 100}%`} />
+            <Stat label="volume 24h" value={market ? fmtV(Number(formatEther(market.volume24h))) : "—"} />
+            <Stat label="holders" value={market ? market.holders.toLocaleString("en-US") : "—"} />
+            <Stat label="trade fee" value={`${pool.feePips / 10_000}%`} />
+            <Stat label="buy fee now" value={`${pool.buyFeePips / 10_000}%`} />
           </dl>
           <div className="border border-border p-4 text-xs">
             <div className="mb-2 flex justify-between text-muted-foreground">
-              <span>bonding curve · supply bought</span>
-              <span>{fmtTokens(info.totalSupply - curve.tokenReserve)} / {fmtTokens(info.totalSupply)}</span>
+              <span>Uniswap v4 pool · graduation line</span>
+              <span>{graduated ? "graduated" : `${(pool.graduationBps / 100).toFixed(1)}%`}</span>
             </div>
             <p className="tracking-tight text-signal">
               [{"█".repeat(Math.round(progress * 30))}
@@ -223,8 +227,8 @@ export function TokenView() {
         </div>
 
         <div className="space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <TradePanel info={info} curve={curve} onTraded={refresh} ethUsd={ethUsd} />
-          <InfoCard info={info} />
+          <TradePanel info={info} pool={pool} onTraded={refresh} ethUsd={ethUsd} />
+          <InfoCard info={info} pool={pool} />
         </div>
 
         <div className="min-w-0 lg:col-start-1 lg:row-start-2">
@@ -256,18 +260,18 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const BUY_PRESETS = ["0.001", "0.01", "0.05", "0.1"];
+const BUY_PRESETS = ["0.1", "0.5", "1", "5"];
 const SELL_PRESETS = [25, 50, 75, 100];
 const SLIPPAGES = [100, 500, 1000];
 
 function TradePanel({
   info,
-  curve,
+  pool,
   onTraded,
   ethUsd,
 }: {
   info: TokenInfo;
-  curve: CurveState;
+  pool: PoolState;
   onTraded: () => Promise<void>;
   ethUsd: number | null;
 }) {
@@ -287,7 +291,7 @@ function TradePanel({
       const account = address as Address;
       const [eth, tokens] = await Promise.all([
         client.getBalance({ address: account }),
-        client.readContract({ address: info.address, abi: launchedTokenAbi, functionName: "balanceOf", args: [account] }),
+        client.readContract({ address: info.address, abi: montraTokenAbi, functionName: "balanceOf", args: [account] }),
       ]);
       setBalances({ eth, tokens });
     } catch {
@@ -310,7 +314,29 @@ function TradePanel({
   } catch {
     parsed = null;
   }
-  const expected = parsed ? (tab === "buy" ? quoteBuy(curve, parsed) : quoteSell(curve, parsed)) : BigInt(0);
+  // exact quote from Montra's router, refreshed as the amount changes
+  const [quoted, setQuoted] = useState<{ key: string; out: bigint; error?: string } | null>(null);
+  const quoteKey = parsed ? `${tab}:${parsed}` : "";
+  useEffect(() => {
+    if (!parsed) return;
+    let live = true;
+    const t = setTimeout(async () => {
+      try {
+        const out = await quote(readClient(), pool, tab, parsed!);
+        if (live) setQuoted({ key: quoteKey, out });
+      } catch (err) {
+        if (live) setQuoted({ key: quoteKey, out: BigInt(0), error: (err as Error).message });
+      }
+    }, 350);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+    // quoteKey stands in for tab and parsed; pool refreshes re-quote
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteKey, pool]);
+  const expected = parsed && quoted?.key === quoteKey ? quoted.out : BigInt(0);
+  const quoting = !!parsed && quoted?.key !== quoteKey;
   const insufficient = !!(parsed && balances && (tab === "buy" ? parsed > balances.eth : parsed > balances.tokens));
 
   const submit = async () => {
@@ -322,9 +348,9 @@ function TradePanel({
     try {
       const order =
         tab === "buy"
-          ? { kind: "buy" as const, ethIn: parsed, minTokens: minOut(expected, slippage) }
-          : { kind: "sell" as const, tokensIn: parsed, minEth: minOut(expected, slippage) };
-      const { hash } = await trade(provider, wallet, info.curve, info.address, order, setBusy);
+          ? { kind: "buy" as const, hypeIn: parsed, minTokens: minOut(expected, slippage) }
+          : { kind: "sell" as const, tokensIn: parsed, minHype: minOut(expected, slippage) };
+      const { hash } = await trade(provider, wallet, info.address, order, setBusy);
       setResult({
         ok: true,
         text: tab === "buy" ? `Bought ~${fmtTokens(expected)} $${info.symbol}.` : `Sold for ~${fmtEth(expected)} HYPE${inUsd(expected)}.`,
@@ -339,22 +365,6 @@ function TradePanel({
       setBusy(null);
     }
   };
-
-  if (curve.graduated) {
-    return (
-      <div className="border border-border bg-card/50 p-5 text-sm">
-        <p className="font-semibold">Graduated</p>
-        <p className="mt-2 text-muted-foreground">
-          ${info.symbol} has left its bonding curve and no longer trades here.
-        </p>
-        <Button variant="outline" size="sm" className="mt-4" asChild>
-          <a href={explorerToken(info.address)} target="_blank" rel="noopener noreferrer">
-            View on explorer <ArrowUpRightIcon />
-          </a>
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="border border-border bg-card/50">
@@ -426,7 +436,7 @@ function TradePanel({
           <div className="flex justify-between">
             <dt className="text-muted-foreground">you receive ≈</dt>
             <dd className="tabular-nums">
-              {tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} HYPE${inUsd(expected)}`}
+              {quoting ? "quoting…" : tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} HYPE${inUsd(expected)}`}
             </dd>
           </div>
           <div className="flex items-center justify-between">
@@ -449,7 +459,7 @@ function TradePanel({
         <Button
           className="w-full"
           variant={tab === "buy" ? "signal" : "destructive"}
-          disabled={!!busy || (!!address && (!parsed || insufficient || expected === BigInt(0)))}
+          disabled={!!busy || (!!address && (!parsed || insufficient || quoting || expected === BigInt(0)))}
           onClick={submit}
         >
           {busy ? (
@@ -482,7 +492,7 @@ function TradePanel({
   );
 }
 
-function InfoCard({ info }: { info: TokenInfo }) {
+function InfoCard({ info, pool }: { info: TokenInfo; pool: PoolState }) {
   const [copied, setCopied] = useState(false);
   const links = [
     info.socials.twitter && { href: info.socials.twitter, label: "X", icon: null },
@@ -515,7 +525,7 @@ function InfoCard({ info }: { info: TokenInfo }) {
       <dl className="space-y-2">
         {[
           ["contract", info.address],
-          ["curve", info.curve],
+          ["pool hook", pool.hook],
           ["creator", info.deployer],
         ].map(([k, v]) => (
           <div key={k} className="flex items-baseline gap-2">
@@ -529,9 +539,16 @@ function InfoCard({ info }: { info: TokenInfo }) {
           </div>
         ))}
       </dl>
-      <Button variant="outline" size="sm" className="w-full" onClick={copy}>
-        <CopyIcon /> {copied ? "Copied ✓" : "Copy contract"}
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onClick={copy}>
+          <CopyIcon /> {copied ? "Copied ✓" : "Copy contract"}
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1" asChild>
+          <a href={montraToken(info.address)} target="_blank" rel="noopener noreferrer">
+            Montra <ArrowUpRightIcon />
+          </a>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -565,7 +582,7 @@ function TradesTable({ trades, symbol, ethUsd }: { trades: Trade[]; symbol: stri
             </thead>
             <tbody>
               {rows.map((t) => (
-                <tr key={`${t.tx}-${t.logIndex}`} className="border-b border-dashed border-border last:border-b-0">
+                <tr key={t.id} className="border-b border-dashed border-border last:border-b-0">
                   <td className="px-4 py-2 text-muted-foreground">{t.time ? timeAgo(t.time * 1000) : "—"}</td>
                   <td className={cn("px-4 py-2 font-semibold uppercase", t.kind === "buy" ? "text-signal" : "text-destructive")}>{t.kind}</td>
                   <td className="px-4 py-2 text-right tabular-nums">

@@ -18,7 +18,7 @@ export const PLATFORMS: Record<Platform, { label: string; hosts: string[]; examp
   },
 };
 
-// the launch factory caps every social link at 256 bytes
+// keep social links short (they go into the token's on-chain profile)
 const MAX_LINK = 256;
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 

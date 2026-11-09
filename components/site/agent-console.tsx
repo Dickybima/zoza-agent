@@ -152,7 +152,7 @@ export function AgentConsole() {
     askingRef.current = null;
     markReady(true);
     render(draft, "awaiting confirmation");
-    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% tax: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% protocol. ${logoRef.current ? "Press Launch to go live" : "Upload a logo in the blueprint if you like, then press Launch"}, or edit any field.`;
+    return `${draft.name} · $${draft.ticker} · ${draft.x ? "@" + draft.x : "no X"} · ${draft.website || "no website"}. ${TAX}% fee on every trade: ${CREATOR_FEE}% to you, ${PROTOCOL_FEE}% to Montra. It launches on Montra, in its own locked Uniswap v4 pool. ${logoRef.current ? "Press Launch to go live" : "Upload a logo in the blueprint if you like, then press Launch"}, or edit any field.`;
   };
 
   const deploy = async (): Promise<string> => {
@@ -185,7 +185,6 @@ export function AgentConsole() {
           x: tok.x ?? null,
           website: tok.website ?? null,
           logo: logoUrl,
-          creatorTaxBps: CREATOR_FEE * 100,
         },
         (status) => render(tok, status),
       );
@@ -206,7 +205,6 @@ export function AgentConsole() {
       x: tok.x ?? null,
       website: tok.website ?? null,
       address: result.token,
-      curve: result.curve,
       logo: logoUrl || undefined,
       block: Number(result.block),
       creator: wallet,
@@ -215,7 +213,7 @@ export function AgentConsole() {
       launchSeconds: Math.round((performance.now() - sentAt) / 100) / 10,
     });
     setGoExplore(true); // redirect once the orb has shown the result
-    return `${tok.name} ($${tok.ticker}) is live on ${NETWORK}. Contract ${shortAddr(result.token)}. ${CREATOR_FEE}% of every trade flows to ${shortAddr(wallet)}. Opening Explore…`;
+    return `${tok.name} ($${tok.ticker}) is live on Montra, on ${NETWORK}. Contract ${shortAddr(result.token)}. ${CREATOR_FEE}% of every trade flows to ${shortAddr(wallet)}. Opening Explore…`;
   };
 
   const reply = async (text: string): Promise<string> => {
@@ -449,7 +447,7 @@ function BlueprintPanel({
     ["website", has("website") ? tok.website || "—" : "…"],
     ["tax", `${TAX}% buy & sell`],
     [`creator_fee (${CREATOR_FEE}%)`, wallet ? shortAddr(wallet) : "creator wallet"],
-    [`protocol_fee (${PROTOCOL_FEE}%)`, "protocol"],
+    [`protocol_fee (${PROTOCOL_FEE}%)`, "Montra"],
     ["supply", fmt(SUPPLY)],
   ];
   if (tok.address) rows.push(["contract", shortAddr(tok.address)]);

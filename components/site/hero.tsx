@@ -19,8 +19,8 @@ export function Hero() {
           </span>
         </h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          A name, a ticker, a link to your world. Zoza writes the contract, wires your 2% creator
-          share, and mints it on Elysium before your coffee cools.
+          A name, a ticker, a link to your world. Zoza launches it on Montra, wires your 2.6% creator
+          share, and it trades on Elysium before your coffee cools.
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <Button asChild>

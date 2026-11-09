@@ -2,18 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-import { IS_TESTNET } from "@/lib/chain";
 
 // HYPE/USD for displaying prices in dollars (HYPE is Elysium's gas and quote
 // currency; the "eth" names are historical). Read from Zoza's /api/eth-price
-// (cached server-side), falling back to CoinGecko from the browser. On
-// Elysium Testnet, HYPE has no dollar value, so amounts stay in HYPE.
+// (cached server-side), falling back to CoinGecko from the browser.
 
 let cached: { usd: number; at: number } | null = null;
 const MAX_AGE = 60_000;
 
 async function fetchEthUsd(): Promise<number | null> {
-  if (IS_TESTNET) return null;
   if (cached && Date.now() - cached.at < MAX_AGE) return cached.usd;
   const tries: [string, (j: never) => unknown][] = [
     ["/api/eth-price", (j: { usd: number }) => j.usd],

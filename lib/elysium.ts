@@ -6,9 +6,11 @@
 // claimed through the Outbox on HyperEVM once the challenge period has passed.
 //
 // Every contract address is read from the rollup contract itself, so a network
-// needs only its rollup address and RPCs. Elysium mainnet's public RPC and
-// rollup address are published at launch: set NEXT_PUBLIC_ELYSIUM_MAINNET_RPC
-// and NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP (and redeploy) to switch mainnet on.
+// needs only its rollup address and RPCs. Mainnet reads and sends through the
+// Montra RPC, which carries plain HYPE withdrawals (ArbSys.withdrawEth); its
+// rollup 0x508c…d217 is the one Elysium's Inbox on HyperEVM
+// (0xce59…2cff) reports, checked on chain. Both can be overridden with
+// NEXT_PUBLIC_ELYSIUM_MAINNET_RPC and NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP.
 import type { EIP1193Provider } from "viem";
 
 export type ChainInfo = { chainId: number; name: string; rpc: string | null };
@@ -25,8 +27,8 @@ export const NETWORKS: Record<BridgeNetwork["key"], BridgeNetwork> = {
     key: "mainnet",
     label: "Mainnet",
     parent: { chainId: 999, name: "HyperEVM", rpc: "https://rpc.hyperliquid.xyz/evm" },
-    child: { chainId: 99901, name: "Elysium", rpc: process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_RPC || null },
-    rollup: process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP || null,
+    child: { chainId: 99901, name: "Elysium", rpc: process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_RPC || "https://rpc.montramarkets.xyz" },
+    rollup: process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP || "0x508c173dfe5f737b3493195bf785d71fa76fd217",
   },
   testnet: {
     key: "testnet",

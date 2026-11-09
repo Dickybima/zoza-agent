@@ -9,7 +9,7 @@ const CHECKS = [
   "HYPE for gas, bridged in from HyperEVM in about a minute",
   "Settles to HyperEVM as a Kinetiq rollup",
   "Standard ERC-20 tokens, tradable from block one",
-  "Zoza’s own launchpad contracts, open on-chain",
+  "Launched through Montra: liquidity locked from block one",
 ];
 
 const pad = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s + " ".repeat(n - s.length));
@@ -66,7 +66,7 @@ export function Network() {
         <div>
           <SectionHeading index="05" label="Built on Elysium" title="Standing on a foundation designed for scale." className="mb-6">
             Zoza runs natively on Elysium, Kinetiq’s L2 on HyperEVM, where HYPE is the gas. Every token created is a fully sovereign
-            on-chain asset: transparent, verifiable, and tradable on its bonding curve from its very first second.
+            on-chain asset, launched on Montra into a locked Uniswap v4 pool and tradable from its very first block.
           </SectionHeading>
           <ul className="space-y-2.5 text-sm">
             {CHECKS.map((c) => (

@@ -1,19 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatEther, getAddress } from "viem";
+import { useCallback, useEffect, useState } from "react";
+import { getAddress } from "viem";
 import type { Address } from "viem";
 
-import { fetchCurve, launchedTokenAbi, quoteSell, spotPrice } from "@/lib/curve";
-import type { CurveState } from "@/lib/curve";
-import { claimableBalance, feeEscrowAddress } from "@/lib/fees";
-import { useAllLaunches } from "@/lib/launches";
+import { readCreatorToken } from "@/lib/fees";
+import { fetchPool, montraApi, quote } from "@/lib/montra";
 import { readClient } from "@/lib/rpc";
 import { pageHidden } from "@/lib/visible";
 
 const REFRESH_MS = 30_000;
-const BATCH = 8;
 const ZERO = BigInt(0);
+// exit quotes and fee reads are one call each; keep a refresh bounded
+const MAX_QUOTED = 12;
+const MAX_LANES = 20;
 
 export type Holding = {
   token: Address;
@@ -21,14 +21,13 @@ export type Holding = {
   symbol: string;
   logo?: string;
   balance: bigint;
-  curve: Address;
-  state: CurveState | null;
-  /** HYPE per token at the curve's spot price */
+  graduated: boolean;
+  /** HYPE per token at the pool's price */
   priceEth: number;
-  /** what the bag is worth at spot, in HYPE */
+  /** what the bag is worth at that price, in HYPE */
   valueEth: number;
-  /** what selling it all into the curve would return now, after fees (wei) */
-  exitEth: bigint;
+  /** what selling it all into the pool would return now, after fees (wei); null when not quoted */
+  exitEth: bigint | null;
   /** whether this wallet launched it */
   mine: boolean;
 };
@@ -37,33 +36,20 @@ export type Portfolio = {
   eth: bigint;
   claimable: bigint;
   holdings: Holding[];
-  /** Zoza tokens this wallet launched */
+  /** tokens whose creator fees pay this wallet */
   launched: number;
 };
 
-async function inBatches<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = [];
-  for (let i = 0; i < items.length; i += BATCH) out.push(...(await Promise.all(items.slice(i, i + BATCH).map(fn))));
-  return out;
-}
-
 /**
- * Everything `wallet` holds across Zoza: its HYPE, its balance of every token
- * launched through Zoza (valued from each bonding curve), and its claimable
- * creator fees. Read on-chain and refreshed every 30 s.
+ * Everything `wallet` holds on Montra: its HYPE, every Montra token it holds
+ * (from Montra's indexer, with the exit value of selling each into its pool
+ * quoted on-chain), and the creator fees its pools hold for it. Refreshed
+ * every 30 s.
  */
 export function usePortfolio(wallet: string | null) {
-  const { tokens } = useAllLaunches();
   const [data, setData] = useState<Portfolio | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [tick, setTick] = useState(0);
-
-  // every Zoza token, once each
-  const list = useMemo(() => {
-    const seen = new Set<string>();
-    return tokens.filter((t) => !seen.has(t.address.toLowerCase()) && seen.add(t.address.toLowerCase()));
-  }, [tokens]);
-  const listKey = list.map((t) => t.address).join(",");
 
   useEffect(() => {
     if (!wallet) return;
@@ -74,44 +60,43 @@ export function usePortfolio(wallet: string | null) {
       setStatus((s) => (s === "ok" ? s : "loading"));
       try {
         const client = readClient();
-        const [eth, claimable, balances] = await Promise.all([
+        const [eth, held, lanes] = await Promise.all([
           client.getBalance({ address: account }),
-          feeEscrowAddress(client)
-            .then((escrow) => claimableBalance(client, escrow, account))
-            .catch(() => ZERO),
-          inBatches(list, (tok) =>
-            client
-              .readContract({ address: tok.address as Address, abi: launchedTokenAbi, functionName: "balanceOf", args: [account] })
-              .catch(() => ZERO),
-          ),
+          montraApi.holdings(account),
+          montraApi.lanes(account).catch(() => ({ tokens: [] })) as Promise<{ tokens?: { address: string }[] }>,
         ]);
-        const held = list.map((tok, i) => ({ tok, balance: balances[i] })).filter((h) => h.balance > ZERO);
-        const holdings = await inBatches(held, async ({ tok, balance }): Promise<Holding> => {
-          const address = tok.address as Address;
-          const [curve, name, symbol] = await Promise.all([
-            tok.curve ? Promise.resolve(tok.curve as Address) : client.readContract({ address, abi: launchedTokenAbi, functionName: "curve" }),
-            client.readContract({ address, abi: launchedTokenAbi, functionName: "name" }).catch(() => tok.name),
-            client.readContract({ address, abi: launchedTokenAbi, functionName: "symbol" }).catch(() => tok.ticker),
-          ]);
-          const state = await fetchCurve(client, curve).catch(() => null);
-          const priceEth = state && !state.graduated ? spotPrice(state) : 0;
+        const cards = (held.holdings ?? []).filter((h) => BigInt(h.balance || "0") > ZERO);
+        const holdings: Holding[] = cards.map((h) => {
+          const balance = BigInt(h.balance);
+          const priceEth = Number(h.price) || 0;
           return {
-            token: address,
-            name,
-            symbol,
-            logo: tok.logo,
+            token: getAddress(h.address),
+            name: h.name,
+            symbol: h.symbol,
+            logo: h.imageUrl ?? undefined,
             balance,
-            curve,
-            state,
+            graduated: h.graduation?.stage === "graduated",
             priceEth,
-            valueEth: priceEth * Number(formatEther(balance)),
-            exitEth: state && !state.graduated ? quoteSell(state, balance) : ZERO,
-            mine: tok.creator.toLowerCase() === account.toLowerCase(),
+            valueEth: h.value !== undefined ? Number(h.value) : priceEth * (Number(balance) / 1e18),
+            exitEth: null,
+            mine: h.creator?.toLowerCase() === account.toLowerCase(),
           };
         });
+        holdings.sort((a, b) => b.valueEth - a.valueEth);
+        // exact exit value for the largest bags
+        await Promise.all(
+          holdings.slice(0, MAX_QUOTED).map(async (h) => {
+            try {
+              h.exitEth = await quote(client, await fetchPool(client, h.token), "sell", h.balance);
+            } catch {
+              h.exitEth = null;
+            }
+          }),
+        );
+        const laneTokens = (lanes.tokens ?? []).slice(0, MAX_LANES);
+        const claims = await Promise.all(laneTokens.map((l) => readCreatorToken(client, getAddress(l.address)).then((c) => c.claimable).catch(() => ZERO)));
         if (!live) return;
-        holdings.sort((a, b) => b.valueEth - a.valueEth || (b.balance > a.balance ? 1 : -1));
-        setData({ eth, claimable, holdings, launched: list.filter((tok) => tok.creator.toLowerCase() === account.toLowerCase()).length });
+        setData({ eth, claimable: claims.reduce((s, c) => s + c, ZERO), holdings, launched: (lanes.tokens ?? []).length });
         setStatus("ok");
       } catch {
         if (live) setStatus((s) => (s === "ok" ? s : "error"));
@@ -123,9 +108,7 @@ export function usePortfolio(wallet: string | null) {
       clearTimeout(t);
       clearTimeout(timer);
     };
-    // listKey stands in for list; tick re-runs the read on a timer or a manual refresh
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet, listKey, tick]);
+  }, [wallet, tick]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   return { data: wallet ? data : null, status: wallet ? status : "idle", refresh };

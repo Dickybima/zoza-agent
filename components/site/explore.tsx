@@ -7,7 +7,7 @@ import { isAddress } from "viem";
 
 import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
 import type { LaunchedToken } from "@/lib/agent";
-import { explorerToken } from "@/lib/chain";
+import { montraToken } from "@/lib/montra";
 import { PLATFORMS } from "@/lib/profile";
 import { useAllLaunches } from "@/lib/launches";
 import { Badge } from "@/components/ui/badge";
@@ -117,8 +117,8 @@ export function Explore() {
 
       <p className="mt-10 text-center text-xs text-muted-foreground">
         {status === "error"
-          ? "// showing launches from this browser · Elysium didn’t answer, retrying"
-          : "// every token launched through Zoza · read from Elysium"}
+          ? "// showing launches from this browser · Montra didn’t answer, retrying"
+          : "// every token launched through Zoza on Montra · Elysium"}
       </p>
     </Section>
   );
@@ -167,7 +167,7 @@ function TokenCard({ t, fresh = false }: { t: LaunchedToken; fresh?: boolean }) 
         {[
           ["contract", shortAddr(t.address)],
           ["creator", shortAddr(t.creator)],
-          ["tax", `${TAX}% · ${CREATOR_FEE}% creator`],
+          ["fee", `${TAX}% · ${CREATOR_FEE}% creator`],
           ["launched", t.createdAt ? timeAgo(t.createdAt) : "—"],
         ].map(([k, v]) => (
           <div key={k} className="flex items-baseline gap-2">
@@ -198,8 +198,8 @@ function TokenCard({ t, fresh = false }: { t: LaunchedToken; fresh?: boolean }) 
           </Link>
         </Button>
         <Button variant="outline" size="sm" asChild>
-          <a href={explorerToken(t.address)} target="_blank" rel="noopener noreferrer">
-            Explorer <ArrowUpRightIcon />
+          <a href={montraToken(t.address)} target="_blank" rel="noopener noreferrer">
+            Montra <ArrowUpRightIcon />
           </a>
         </Button>
         <Button variant="outline" size="sm" onClick={copy}>

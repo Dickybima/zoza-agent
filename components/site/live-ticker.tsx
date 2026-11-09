@@ -3,20 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { CHAIN_NAME, NATIVE, zozaChain } from "@/lib/chain";
+import { CHAIN_NAME, zozaChain } from "@/lib/chain";
 import { fmtUsd } from "@/lib/format";
-import { LAUNCHPAD_LIVE, LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
+import { montraApi } from "@/lib/montra";
 import { readClient } from "@/lib/rpc";
 import { pageHidden } from "@/lib/visible";
 import { useEthUsd } from "@/hooks/use-eth-usd";
 
 const POLL_MS = 30_000;
 
-// A scrolling strip of live Elysium figures, all read on-chain.
+// A scrolling strip of live Elysium and Montra figures.
 export function LiveTicker() {
   const hypeUsd = useEthUsd();
   const [head, setHead] = useState<bigint | null>(null);
   const [launched, setLaunched] = useState<bigint | null>(null);
+
 
   useEffect(() => {
     const client = readClient();
@@ -28,12 +29,15 @@ export function LiveTicker() {
         if (loaded && pageHidden()) return;
         const [h, n] = await Promise.all([
           client.getBlockNumber(),
-          LAUNCHPAD_LIVE ? client.readContract({ address: LAUNCH_FACTORY, abi: launchFactoryAbi, functionName: "tokenCount" }) : Promise.resolve(null),
+          montraApi
+            .stats()
+            .then((s) => (typeof s.tokensLaunched === "number" ? BigInt(s.tokensLaunched) : null))
+            .catch(() => null),
         ]);
         loaded = true;
         if (live) {
           setHead(h);
-          setLaunched(n);
+          if (n !== null) setLaunched(n);
         }
       } catch {
         // keep the last reading; placeholders until one arrives
@@ -51,10 +55,10 @@ export function LiveTicker() {
   const dash = "···";
   const items: [string, string, boolean?][] = [
     ["network", CHAIN_NAME, true],
+    ["launchpad", "Montra", true],
+    ["hype", hypeUsd ? fmtUsd(hypeUsd) : dash],
+    ["tokens on montra", launched !== null ? launched.toLocaleString("en-US") : dash],
     ["chain id", String(zozaChain.id)],
-    ["gas", NATIVE],
-    ...(hypeUsd ? [["hype", fmtUsd(hypeUsd)] as [string, string]] : []),
-    ["tokens launched", LAUNCHPAD_LIVE ? (launched !== null ? launched.toLocaleString("en-US") : dash) : "soon", true],
     ["block", head !== null ? `#${head.toLocaleString("en-US")}` : dash],
     ["", "hyperevm ⇄ elysium bridge live"],
     ["", "say the word. it’s on-chain."],

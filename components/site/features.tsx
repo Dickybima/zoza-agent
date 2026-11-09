@@ -23,7 +23,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: WalletIcon,
     title: "Rewards for creators",
-    body: "Of the 3% tax on every buy and sell, 2% flows straight to the creator’s wallet — an enduring reward for every idea you bring to life.",
+    body: "Of the 3% fee on every buy and sell, 2.6% flows to the creator’s wallet in HYPE — an enduring reward for every idea you bring to life.",
   },
   {
     icon: PaletteIcon,

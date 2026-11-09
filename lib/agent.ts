@@ -1,10 +1,12 @@
 // Zoza agent: natural-language parsing for token launches.
 // Creators only provide a name, ticker, X account, and website.
-// Fixed 3% tax: 2% to the token creator's wallet, 1% protocol fee.
+// Launches go through Montra (lib/montra.ts) at its 3% tier: of every trade,
+// 2.6% to the token creator's wallet and 0.4% to Montra's protocol (from
+// Montra's LP line on, 0.5% of it goes to liquidity providers instead).
 
-export const CREATOR_FEE = 2;
-export const PROTOCOL_FEE = 1;
-export const TAX = CREATOR_FEE + PROTOCOL_FEE;
+export const CREATOR_FEE = 2.6;
+export const PROTOCOL_FEE = 0.4;
+export const TAX = 3;
 export const SUPPLY = 1_000_000_000;
 export const NETWORK = "Elysium";
 

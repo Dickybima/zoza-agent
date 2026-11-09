@@ -1,6 +1,6 @@
 # Zoza
 
-Landing page and app for **Zoza**: an AI agent that launches tokens on **Elysium**, Kinetiq's L2 on HyperEVM (HYPE gas).
+Landing page and app for **Zoza**: an AI agent that launches tokens on **Montra**, the launchpad on **Elysium** (Kinetiq's L2 on HyperEVM, HYPE gas).
 
 Built with **Next.js (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui**, themed as an ASCII terminal around the `VanishRun` tunnel hero (`components/ui/hero-ascii-tunnel.tsx`).
 
@@ -21,9 +21,7 @@ npm run lint
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
 app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal, portfolio, bridge
-app/deploy/page.tsx  one-time launchpad deployment (not in the menu)
-contracts/           ZozaLaunchpad.sol: launch factory, token, bonding curve, fee escrow
-scripts/             compile-contracts.cjs (writes lib/launchpad-artifact.ts)
+lib/montra.ts        Montra: launch, pools, quotes, trades, creator fees, public API (ABIs in lib/montra-abi.ts)
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
@@ -36,43 +34,30 @@ brand/               logo and X (Twitter) profile/header images
 
 shadcn is configured in `components.json` (aliases `@/components/ui`, `@/lib/utils`). New primitives can be added with `npx shadcn@latest add <component>` and will land in `components/ui/`.
 
-## Network
+## Network and Montra
 
-Everything runs on **Elysium Testnet** (chain ID 99801, RPC `testnet-rpc.elysium.kinetiq.xyz`) until Elysium mainnet's public RPC is published. `lib/chain.ts` switches the whole site (launches, trading, fees, portfolio, the RPC proxy and the bridge) to **Elysium mainnet** (chain 99901) when `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` is set. `NEXT_PUBLIC_ELYSIUM_EXPLORER` overrides the explorer base URL (default `https://testnet.elysium.kinetiq.xyz/explorer`, linked as `/tx/…`, `/address/…`, `/token/…`).
+Zoza runs on **Elysium mainnet** (chain ID 99901) and launches every token on **[Montra](https://montramarkets.xyz)**, Elysium's launchpad (`lib/montra.ts`, docs: montramarkets.xyz/docs/build). One `launch` call to Montra's factory creates the token (1,000,000,000 supply), its Uniswap v4 pool with Montra's hook, and its locked liquidity; there is no bonding curve and nothing migrates. Every trade settles in that pool. Montra's contract addresses are read from its registry, `0xF1E2FA75422F889e565F3142bdbf60B28dce2aa7`; ABIs are Montra's published ones (montramarkets.xyz/docs/abis).
+
+- **Wallets reach Elysium through the Montra RPC**, `https://rpc.montramarkets.xyz`: it reads from Elysium nodes and posts Montra's own transactions (launches, trades, claims, plain HYPE transfers and withdrawals) into Elysium's inbox on HyperEVM, usually landing within 30 seconds. It isn't a general RPC.
+- **Fee tier.** Zoza launches at Montra's 3% HYPE tier with no anti-snipe fee: 2.6% of every trade to the creator's wallet and 0.4% to Montra (from Montra's LP line on, part of it goes to liquidity providers).
+- **Builder code.** Each launch carries Zoza's Montra builder code (`NEXT_PUBLIC_MONTRA_BUILDER_CODE`, default `zoza`) as an ERC-8021 suffix. Register that code with the wallet that should be paid at montramarkets.xyz/builders/join: Montra's Builders programme then pays it 25% of Montra's protocol fee on every trade in those tokens for 90 days, and Montra's API lists the launches credited to it, which is where Explore's shared list comes from.
+- **Metadata.** `api/montra-metadata.mjs` stores a launch's image and metadata document with Montra's API (as Montra's own site does; its upload routes only take browser requests from Montra's origin), and the launch names them; the image also goes into the token's on-chain profile.
 
 | Variable | Value |
 | --- | --- |
-| `NEXT_PUBLIC_ZOZA_FACTORY` | address of the Zoza launch factory on Elysium (see below) |
-| `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` | Elysium mainnet RPC; unset = testnet |
-| `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` | Elysium rollup contract on HyperEVM (bridge, mainnet) |
-| `NEXT_PUBLIC_ELYSIUM_EXPLORER` | optional explorer base URL |
-| `ZOZA_RPC_URL` | optional server-side RPC for `api/rpc.js` and `api/launches.mjs` |
-
-## Launchpad contracts
-
-Zoza runs its own launchpad on Elysium: `contracts/ZozaLaunchpad.sol` (Solidity 0.8.24).
-
-- **ZozaLaunchFactory** `launchToken(params, configId, address(0))` deploys a token and its curve, takes the launch fee (to the treasury), and keeps a registry: `allTokens`, `recentTokens(offset, count)`, `tokensBy(deployer)`, `launches(token)` (curve, deployer, block, time). The owner can change the launch fee, the creator-tax cap, the protocol's share of the base fee and the launch configs; existing curves keep their terms. `previewLaunchEconomics` pins the quoted terms for a launch.
-- **ZozaToken**: plain ERC-20 (18 decimals, 1B supply by default) with on-chain metadata (`getTokenInfo()`: deployer, logo URL, description, socials). Transfers to `0x0` and `burn()` lower the supply.
-- **ZozaCurve**: constant-product bonding curve with a virtual HYPE reserve (`phantomQuote`, 100 HYPE by default, which sets the starting market cap). The whole supply sits on the curve, `buy` / `sell` settle in native HYPE and emit `CurveBuy` / `CurveSell`. There is no migration to a DEX: tokens trade on their curve for good (`graduated()` is always false). Fees per trade: the base fee (1%, to the protocol by default) and the creator tax (2% from Zoza, capped at 5%), booked on the curve until anyone calls `sweepFees`.
-- **ZozaFeeEscrow**: holds swept fees; each recipient withdraws with `claim()`.
-
-The contracts haven't had a third-party audit.
-
-**Deploying.** Open `/deploy`, connect the wallet that should own the launchpad (it needs a little HYPE on Elysium for gas: bridge it from `/bridge`), set the launch fee and the starting virtual reserve, and confirm one transaction. Put the factory address it shows into `NEXT_PUBLIC_ZOZA_FACTORY` on Vercel and redeploy. Until then, the launch flows say the launchpad isn't live yet. After editing the contract, rebuild the deploy artifact with `npm i --no-save solc@0.8.24 && node scripts/compile-contracts.cjs`.
+| `NEXT_PUBLIC_MONTRA_BUILDER_CODE` | Zoza's registered Montra builder code (default `zoza`) |
+| `NEXT_PUBLIC_ELYSIUM_RPC` | optional: wallet/read RPC for Elysium (default the Montra RPC) |
+| `NEXT_PUBLIC_ELYSIUM_EXPLORER` | optional explorer base URL (default `https://elysium.kinetiq.xyz/explorer`) |
+| `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC`, `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` | optional bridge overrides |
+| `ZOZA_RPC_URL` | optional server-side RPC for `api/rpc.js` |
 
 ## Agent and on-chain launches
 
 The /agent page uses the MorphOrb component: type into the pill (e.g. `name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz`), the orb thinks, and Zoza's reply unfolds as a card. X and website can be skipped.
 
-Once the blueprint is complete, **Launch** sends a real transaction from the connected wallet:
+Once the blueprint is complete, **Launch** sends a real transaction from the connected wallet: the wallet is switched to Elysium (added with the Montra RPC if missing), Montra's launch terms are read (`launchEnabled`, `launchFee`, the 3% HYPE row from `getConfig`), the metadata is stored, `launch` is simulated and then sent with Zoza's builder suffix for the user to confirm, and `TokenLaunched` gives the token address. The creator is the launching wallet and receives the creator share.
 
-1. the wallet is switched to Elysium (added if missing);
-2. launch terms are read from the factory (`canLaunch`, `launchFee`, `maxCreatorTaxBps`, the first enabled launch config, `previewLaunchEconomics`);
-3. `launchToken` is simulated, then sent for the user to confirm in their wallet, paying `launchFee`; the creator tax is 2% (`creatorTaxBps = 200`) paid to the creator;
-4. the `TokenLaunched` event gives the token address, the token is added to **Explore** and the user is taken there.
-
-Chain reads go to Elysium's public RPC (and the wallet's RPC when connected) first. The same-origin proxy `api/rpc.js` (a Vercel Serverless Function forwarding read-only JSON-RPC methods) is only a fallback: it joins when the direct sources fail or stay silent for 3 s, and takes over for a minute when the browser can't reach the public RPC at all. Small proxied reads go out as `GET /api/rpc?b=…` with a fixed id, which the edge caches for 4 s so concurrent visitors share one call. Polls skip their reads while the tab is in the background, which keeps serverless usage inside Vercel's Hobby limits.
+Chain reads go to the Montra RPC (and the wallet's RPC when connected) first; the same-origin proxy `api/rpc.js` is a fallback that joins when the direct sources fail or stay silent for 3 s. Polls skip their reads while the tab is in the background.
 
 ### Token logos
 
@@ -86,21 +71,21 @@ Uploads need a Blob store connected to the Vercel project: Storage → Create �
 
 ### Portfolio
 
-`/portfolio` (`lib/portfolio.ts`) reads the connected wallet from Elysium: its HYPE, its balance of every Zoza token in the shared launch list, each valued at its bonding curve's spot price with the "exit" value of selling it all into the curve after fees, and its claimable creator fees from the fee escrow. Net worth, an allocation bar and a holdings table refresh every 30 s.
+`/portfolio` (`lib/portfolio.ts`) shows the connected wallet's HYPE, every Montra token it holds (Montra's API `/api/wallets/{wallet}/holdings`), each valued at its pool's price with the exact "exit" value of selling it all quoted on-chain, and the creator fees its pools hold for it.
 
 ### Terminal
 
-`/terminal` swaps Zoza tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 1 hype to meow`, `buy meow with 1 hype`, `swap 1m meow to hype`, `sell 50% meow`, `sell all meow`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker, name or address against the shared launch list. Every swap is quoted from the token's bonding curve first, needs a `y` to go ahead, and then runs through the same `trade()` as the token page (approve-then-sell for sells, 5% slippage).
+`/terminal` swaps Montra tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 1 hype to meow`, `buy meow with 1 hype`, `swap 1m meow to hype`, `sell 50% meow`, `sell all meow`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker or name against Zoza's launch list, or by any Montra token's address. Every swap is quoted exactly by Montra's router first (`quoteExactIn`), needs a `y` to go ahead, and runs through `swapExactIn` (approve-then-sell for sells, 5% slippage).
 
 ### Claiming creator fees
 
-`/claim` (`lib/fees.ts`) shows a creator's fees. Each trade books the creator tax (plus any creator share of the base fee) on the token's bonding curve; `sweepFees(0)` on the curve moves it into the shared fee escrow (`factory.feeEscrow()`), and `claim()` on the escrow sends the wallet's whole HYPE balance to it. The page lists the wallet's launches (from the factory's `tokensBy`, this browser, or added by address), with a Collect button per token and a Claim all button that collects every token and then claims.
+`/claim` (`lib/fees.ts`) lists the pools whose creator fees pay the connected wallet (Montra's API `/api/wallets/{wallet}/lanes`, this browser's launches, or added by address), with what each would pay now (`LaunchLens.creatorClaimable`). **Claim** calls `claim(poolId, wallet)` on the pool's hook, which only the pool's recipient can do, and pays the wallet in HYPE.
 
 ### Token pages and trading
 
-`/token?address=0x…` reads everything from chain (`lib/curve.ts`): name, symbol, logo, description and socials from the token's `getTokenInfo()`, the bonding curve's reserves, fees and how much of the supply has been bought, and its `CurveBuy` / `CurveSell` events (from the launch block in the factory's registry), which drive the price line chart (lightweight-charts, 1m–1h buckets) and the transactions table. It refreshes every 8 s. Amounts are in HYPE; on mainnet they are also shown in USD using the HYPE/USD rate from `api/eth-price.js` (Hyperliquid, falling back to CoinGecko and Kraken, edge-cached for 60 s). The trade panel buys with HYPE (`buy`) or sells (`approve` then `sell`) against the curve with a slippage bound. Any token address can be opened from the Explore search box.
+`/token?address=0x…` reads the token's profile from chain and its pool through Montra's lens (`tokenView`: price, fee, buy fee now, graduation progress), and its trades, holders and volume from Montra's indexer; the trades drive the price chart and the transactions table. The trade panel quotes every amount exactly with Montra's router and buys or sells through `swapExactIn` with a slippage bound. Any Montra token can be opened by address, and each page links to the token on Montra.
 
-The Explore feed lists every token launched through Zoza, on any device: `api/launches.mjs` reads the newest 120 from the factory's registry (`recentTokens` + `launches`) with their on-chain metadata, edge-cached for 60 s. The browser's own launches (localStorage, kept per chain) are merged in so a new token appears immediately.
+The Explore feed lists every token launched through Zoza: `api/launches.mjs` reads the launches credited to Zoza's builder code from Montra's API (with each token's details), edge-cached for 60 s, merged with the browser's own launches so a new token appears immediately.
 
 ## Bridge (HyperEVM ↔ Elysium)
 
@@ -109,6 +94,6 @@ The Explore feed lists every token launched through Zoza, on any device: `api/la
 - **Deposit** (HyperEVM → Elysium): `Inbox.depositEth`, lands in about a minute.
 - **Withdraw** (Elysium → HyperEVM): `ArbSys.withdrawEth`, then **Claim** through `Outbox.executeTransaction` once the challenge period has passed (about a week on mainnet). Transfers are remembered in the browser; "find withdrawals" recovers them from Elysium logs.
 
-Testnet (HyperEVM Testnet 998 ↔ Elysium Testnet 99801) works out of the box. Mainnet switches on when `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` and `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` are set (see **Network**) and the site is redeployed.
+Mainnet (HyperEVM 999 ↔ Elysium 99901) bridges through the rollup `0x508c173dfe5f737b3493195bf785d71fa76fd217` (the one Elysium's Inbox `0xce59f8B65ad41C9DAE4c07A0571a39824bD92cff` reports) and sends Elysium-side withdrawals through the Montra RPC; withdrawals take about six days. Testnet (HyperEVM Testnet 998 ↔ Elysium Testnet 99801) is still offered.
 
 Both chain IDs and the rollup's parent chain are checked at runtime before any transaction is offered.

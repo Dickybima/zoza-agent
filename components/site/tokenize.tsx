@@ -111,7 +111,6 @@ export function Tokenize() {
           x: xHandle || null,
           website: profile.url.replace(/^https:\/\//, ""),
           logo: logoUrl,
-          creatorTaxBps: CREATOR_FEE * 100,
           description:
             `${tokName} ($${tokTicker}) — a tokenized ${label} profile: ${profile.url}. Launched with Zoza.` +
             (picked ? ` Unofficial: not created or endorsed by @${picked.handle}.` : ""),
@@ -124,8 +123,7 @@ export function Tokenize() {
         x: xHandle || null,
         website: profile.url.replace(/^https:\/\//, ""),
         address: result.token,
-        curve: result.curve,
-        logo: logoUrl || undefined,
+          logo: logoUrl || undefined,
         block: Number(result.block),
         creator: wallet,
         tx: result.hash,
@@ -324,7 +322,7 @@ export function Tokenize() {
                   ["x", xHandle ? "@" + xHandle : "—"],
                   ["tax", `${TAX}% buy & sell`],
                   [`creator_fee (${CREATOR_FEE}%)`, address ? shortAddr(address) : "your wallet"],
-                  [`protocol_fee (${PROTOCOL_FEE}%)`, "protocol"],
+                  [`protocol_fee (${PROTOCOL_FEE}%)`, "Montra"],
                   ["supply", fmt(SUPPLY)],
                   ["network", NETWORK],
                 ].map(([k, v]) => (
