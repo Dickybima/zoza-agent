@@ -6,7 +6,7 @@ export const CREATOR_FEE = 2;
 export const PROTOCOL_FEE = 1;
 export const TAX = CREATOR_FEE + PROTOCOL_FEE;
 export const SUPPLY = 1_000_000_000;
-export const NETWORK = "Robinhood Chain";
+export const NETWORK = "Elysium";
 
 export type Field = "name" | "ticker" | "x" | "website";
 export const FIELDS: Field[] = ["name", "ticker", "x", "website"];

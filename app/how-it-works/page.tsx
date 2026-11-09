@@ -5,7 +5,7 @@ import { PageShell } from "@/components/site/page-shell";
 
 export const metadata: Metadata = {
   title: "How it works",
-  description: "Four commands from idea to a live token on Robinhood Chain.",
+  description: "Four commands from idea to a live token on Elysium.",
 };
 
 export default function Page() {

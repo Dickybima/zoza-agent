@@ -16,7 +16,7 @@ export function Cta() {
           </p>
           <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-4xl">It’s time for your vision to take form.</h2>
           <p className="text-sm text-muted-foreground">
-            Join a new generation of creators building the on-chain future with Zoza on Robinhood Chain.
+            Join a new generation of creators building the on-chain future with Zoza on Elysium.
           </p>
           <Button asChild size="lg" className="mt-4">
             <Link href="/agent">

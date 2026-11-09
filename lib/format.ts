@@ -3,7 +3,7 @@ import { formatEther } from "viem";
 const SUBSCRIPT = "₀₁₂₃₄₅₆₇₈₉";
 
 /**
- * Prices on a fresh bonding curve are tiny (1e-9 ETH and below), so runs of
+ * Prices on a fresh bonding curve are tiny (1e-9 HYPE and below), so runs of
  * leading zeros are collapsed into a subscript: 0.000000045 → 0.0₇45.
  */
 export function fmtPrice(p: number): string {

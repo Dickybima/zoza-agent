@@ -1,15 +1,17 @@
-// On-chain token launches through the Pons V2 launch factory on Robinhood
-// Chain (PonsV2LaunchFactory, verified source: github.com/Minh3132/pons-labs,
-// contractsV2/src/v2/PonsV2LaunchFactory.sol). Every launch mints its full
-// supply into a bonding curve that later graduates into a locked Uniswap V4
-// pool; the creator tax set here is paid entirely to the creator.
+// On-chain token launches through Zoza's own launch factory on Elysium
+// (contracts/ZozaLaunchpad.sol). Every launch mints its full supply into a
+// HYPE bonding curve that the token trades on for good; the creator tax set
+// here is paid entirely to the creator.
 import { createWalletClient, custom, decodeEventLog, getAddress, parseAbi, toHex, zeroAddress } from "viem";
 import type { Address, EIP1193Provider, Hash } from "viem";
 
-import { robinhoodChain } from "@/lib/chain";
+import { CHAIN_NAME, zozaChain } from "@/lib/chain";
 import { ChainError, NO_RPC, ensureChain, isInsufficientFunds, notEnoughEth, readClient, simulateFunded, toChainError, withTimeout } from "@/lib/rpc";
 
-export const LAUNCH_FACTORY: Address = "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e";
+// The factory deployed on Elysium (see /deploy). Empty until it is deployed.
+export const LAUNCH_FACTORY = (process.env.NEXT_PUBLIC_ZOZA_FACTORY || "") as Address;
+export const LAUNCHPAD_LIVE = /^0x[0-9a-fA-F]{40}$/.test(LAUNCH_FACTORY);
+export const NOT_DEPLOYED = `The Zoza launchpad isn’t live on ${CHAIN_NAME} yet. Check back soon.`;
 
 export const launchFactoryAbi = parseAbi([
   "struct Socials { string twitter; string telegram; string discord; string website; string farcaster; }",
@@ -22,6 +24,11 @@ export const launchFactoryAbi = parseAbi([
   "function launchConfigCount() view returns (uint256)",
   "function getLaunchConfig(uint256 id) view returns (LaunchConfig)",
   "function previewLaunchEconomics(uint256 launchConfigId, address pairToken) view returns (bytes32)",
+  "function feeEscrow() view returns (address)",
+  "function tokenCount() view returns (uint256)",
+  "function recentTokens(uint256 offset, uint256 count) view returns (address[])",
+  "function tokensBy(address deployer) view returns (address[])",
+  "function launchBlock(address token) view returns (uint256)",
   "event TokenLaunched(address indexed token, address indexed curve, address indexed deployer, address pairToken, uint256 launchConfigId, uint256 graduationThreshold)",
 ]);
 
@@ -56,7 +63,7 @@ const randomSalt = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
 
 /**
  * Launches a token from the connected wallet. The wallet is asked to switch
- * to Robinhood Chain if needed and then to confirm the launch transaction,
+ * to Elysium if needed and then to confirm the launch transaction,
  * which pays the factory's launch fee. Resolves once the launch is mined.
  */
 export async function launchToken(
@@ -68,13 +75,14 @@ export async function launchToken(
   try {
     // wallets may report lowercase or non-checksummed addresses
     const account = getAddress(wallet.toLowerCase());
-    onStatus("switching wallet to Robinhood Chain");
+    if (!LAUNCHPAD_LIVE) throw new ChainError(NOT_DEPLOYED);
+    onStatus(`switching wallet to ${CHAIN_NAME}`);
     await ensureChain(provider);
 
     // reads race the proxy, the public RPC and the wallet; only the launch
     // transaction itself needs the wallet
     const publicClient = readClient(provider);
-    const walletClient = createWalletClient({ chain: robinhoodChain, transport: custom(provider), account });
+    const walletClient = createWalletClient({ chain: zozaChain, transport: custom(provider), account });
     const factory = { address: LAUNCH_FACTORY, abi: launchFactoryAbi } as const;
 
     onStatus("reading launch terms");
@@ -93,7 +101,7 @@ export async function launchToken(
       throw new ChainError(`The launchpad caps the creator tax at ${Number(maxCreatorTaxBps) / 100}%.`);
     }
 
-    // first enabled config, priced in native ETH
+    // first enabled config, priced in native HYPE
     let configId: bigint | null = null;
     let baseFeeBps = 0;
     for (let id = BigInt(0); id < configCount && configId === null; id += BigInt(1)) {
@@ -167,7 +175,7 @@ export async function launchToken(
     onStatus("confirm the launch in your wallet");
     const hash = await walletClient.writeContract(request);
 
-    onStatus("waiting for confirmation on Robinhood Chain");
+    onStatus(`waiting for confirmation on ${CHAIN_NAME}`);
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
     if (receipt.status !== "success") throw new ChainError("The launch transaction reverted.");
 

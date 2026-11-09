@@ -1,10 +1,10 @@
 import { Section, SectionHeading } from "@/components/site/section";
 
 const STEPS = [
-  { cmd: "zoza connect", title: "Connect your identity", body: "Link your wallet to Robinhood Chain — your private keys remain yours, always." },
+  { cmd: "zoza connect", title: "Connect your identity", body: "Link your wallet to Elysium — your private keys remain yours, always." },
   { cmd: 'zoza describe "Moon Cat"', title: "Share your vision", body: "Just a name, ticker, X account, and website. That simple." },
   { cmd: "zoza review", title: "Review with care", body: "Zoza presents your token’s blueprint. Refine every detail before it’s set in stone." },
-  { cmd: "zoza launch", title: "Go on-chain", body: "One signature, and your token is live on Robinhood Chain — permanent and verifiable." },
+  { cmd: "zoza launch", title: "Go on-chain", body: "One signature, and your token is live on Elysium — permanent and verifiable." },
 ];
 
 export function HowItWorks() {

@@ -14,11 +14,11 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Zoza — The AI Token Launch Agent on Robinhood Chain",
+    default: "Zoza — The AI Token Launch Agent on Elysium",
     template: "%s — Zoza",
   },
   description:
-    "Say the word, it’s on-chain. Zoza turns a name and a ticker into a live token on Robinhood Chain — no code, no gatekeepers.",
+    "Say the word, it’s on-chain. Zoza turns a name and a ticker into a live token on Elysium — no code, no gatekeepers.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import { PriceChart } from "@/components/site/price-chart";
 import type { PricePoint } from "@/components/site/price-chart";
 import { TokenAvatar } from "@/components/site/token-avatar";
-import { OFFICIAL_ADDRESS } from "@/lib/official";
 
 const INTERVALS = [
   { label: "1m", sec: 60 },
@@ -35,7 +34,7 @@ const INTERVALS = [
 const POLL_MS = 15_000;
 const FALLBACK_LOOKBACK = BigInt(200_000);
 
-/** Closing price per time bucket, scaled by `rate` (ETH → USD). */
+/** Closing price per time bucket, scaled by `rate` (HYPE → USD). */
 function buildLine(trades: Trade[], sec: number, rate: number): PricePoint[] {
   const out: PricePoint[] = [];
   for (const t of trades) {
@@ -78,12 +77,12 @@ export function TokenView() {
         const info = await fetchTokenInfo(client, address);
         const [curve, head] = await Promise.all([fetchCurve(client, info.curve), client.getBlockNumber()]);
         const from =
-          knownBlock ?? (await findLaunchBlock(client, address, head)) ?? (head > FALLBACK_LOOKBACK ? head - FALLBACK_LOOKBACK : BigInt(0));
+          knownBlock ?? (await findLaunchBlock(client, address).catch(() => null)) ?? (head > FALLBACK_LOOKBACK ? head - FALLBACK_LOOKBACK : BigInt(0));
         const trades = await fetchTrades(client, info.curve, from, head);
         if (!cancelled) setData({ info, curve, trades, head });
       } catch (err) {
         console.warn("[zoza] token load failed", err);
-        if (!cancelled) setError("Couldn’t load this token from Robinhood Chain. Check the address, then refresh to try again.");
+        if (!cancelled) setError("Couldn’t load this token from Elysium. Check the address, then refresh to try again.");
       }
     })();
     return () => {
@@ -115,12 +114,12 @@ export function TokenView() {
     return () => clearInterval(id);
   }, [data, refresh]);
 
-  // USD when the ETH price is known; ETH until then
+  // USD when the HYPE price is known; HYPE until then
   const ethUsd = useEthUsd();
   const rate = ethUsd ?? 1;
   const usd = ethUsd !== null;
-  const fmtP = useCallback((v: number) => (usd ? fmtUsdPrice(v) : `${fmtPrice(v)} ETH`), [usd]);
-  const fmtV = (eth: number) => (usd ? fmtUsd(eth * rate) : `${fmtPrice(eth)} ETH`);
+  const fmtP = useCallback((v: number) => (usd ? fmtUsdPrice(v) : `${fmtPrice(v)} HYPE`), [usd]);
+  const fmtV = (eth: number) => (usd ? fmtUsd(eth * rate) : `${fmtPrice(eth)} HYPE`);
   const points = useMemo(() => buildLine(data?.trades ?? [], interval, rate), [data?.trades, interval, rate]);
 
   if (!address) return <Notice title="Token not found" body="This link has no valid token address." />;
@@ -128,7 +127,7 @@ export function TokenView() {
   if (!data) {
     return (
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-24 text-sm text-muted-foreground sm:px-6">
-        <LoaderIcon className="size-4 animate-spin" /> reading token from Robinhood Chain…
+        <LoaderIcon className="size-4 animate-spin" /> reading token from Elysium…
       </div>
     );
   }
@@ -136,10 +135,9 @@ export function TokenView() {
   const { info, curve, trades } = data;
   const price = spotPrice(curve);
   const mcap = price * Number(formatEther(info.totalSupply));
-  const progress = curve.threshold > BigInt(0) ? Math.min(1, Number(formatEther(curve.realQuote)) / Number(formatEther(curve.threshold))) : 0;
+  // share of the supply bought out of the curve (Zoza curves never migrate, so this is the curve's own fill)
+  const progress = info.totalSupply > BigInt(0) ? Math.min(1, Math.max(0, 1 - Number(formatEther(curve.tokenReserve)) / Number(formatEther(info.totalSupply)))) : 0;
   const logo = info.logo || local?.logo;
-  // the official token shows the Zoza mark if its on-chain artwork is missing or won't load
-  const logoFallback = info.address.toLowerCase() === OFFICIAL_ADDRESS.toLowerCase() ? "/icon.svg" : undefined;
   const lastTrade = trades[trades.length - 1];
   const firstPrice = trades[0]?.price;
   const change = firstPrice && lastTrade ? (lastTrade.price / firstPrice - 1) * 100 : 0;
@@ -152,7 +150,7 @@ export function TokenView() {
 
       {/* header */}
       <div className="mb-8 flex flex-wrap items-center gap-5">
-        <TokenAvatar src={logo} label={info.symbol} seed={info.address} fallback={logoFallback} className="size-16 sm:size-20" />
+        <TokenAvatar src={logo} label={info.symbol} seed={info.address} className="size-16 sm:size-20" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">{info.name}</h1>
@@ -180,7 +178,7 @@ export function TokenView() {
           {/* chart */}
           <div className="border border-border bg-card/50">
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-              <span>price · {usd ? "USD" : "ETH"}</span>
+              <span>price · {usd ? "USD" : "HYPE"}</span>
               <div className="flex gap-1">
                 {INTERVALS.map((i) => (
                   <button
@@ -213,10 +211,8 @@ export function TokenView() {
           </dl>
           <div className="border border-border p-4 text-xs">
             <div className="mb-2 flex justify-between text-muted-foreground">
-              <span>bonding curve → Uniswap v4</span>
-              <span>
-                {fmtV(Number(formatEther(curve.realQuote)))} / {fmtV(Number(formatEther(curve.threshold)))}
-              </span>
+              <span>bonding curve · supply bought</span>
+              <span>{fmtTokens(info.totalSupply - curve.tokenReserve)} / {fmtTokens(info.totalSupply)}</span>
             </div>
             <p className="tracking-tight text-signal">
               [{"█".repeat(Math.round(progress * 30))}
@@ -331,7 +327,7 @@ function TradePanel({
       const { hash } = await trade(provider, wallet, info.curve, info.address, order, setBusy);
       setResult({
         ok: true,
-        text: tab === "buy" ? `Bought ~${fmtTokens(expected)} $${info.symbol}.` : `Sold for ~${fmtEth(expected)} ETH${inUsd(expected)}.`,
+        text: tab === "buy" ? `Bought ~${fmtTokens(expected)} $${info.symbol}.` : `Sold for ~${fmtEth(expected)} HYPE${inUsd(expected)}.`,
         tx: hash,
       });
       setAmount("");
@@ -349,7 +345,7 @@ function TradePanel({
       <div className="border border-border bg-card/50 p-5 text-sm">
         <p className="font-semibold">Graduated</p>
         <p className="mt-2 text-muted-foreground">
-          ${info.symbol} has left its bonding curve and now trades in its locked Uniswap v4 pool.
+          ${info.symbol} has left its bonding curve and no longer trades here.
         </p>
         <Button variant="outline" size="sm" className="mt-4" asChild>
           <a href={explorerToken(info.address)} target="_blank" rel="noopener noreferrer">
@@ -387,7 +383,7 @@ function TradePanel({
             <span>{tab === "buy" ? "you pay" : "you sell"}</span>
             {balances ? (
               <span>
-                balance {tab === "buy" ? `${fmtEth(balances.eth, 4)} ETH${inUsd(balances.eth)}` : `${fmtTokens(balances.tokens)} $${info.symbol}`}
+                balance {tab === "buy" ? `${fmtEth(balances.eth, 4)} HYPE${inUsd(balances.eth)}` : `${fmtTokens(balances.tokens)} $${info.symbol}`}
               </span>
             ) : null}
           </div>
@@ -397,10 +393,10 @@ function TradePanel({
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(",", ".").replace(/[^\d.]/g, ""))}
               placeholder="0.0"
-              aria-label={tab === "buy" ? "ETH amount" : "Token amount"}
+              aria-label={tab === "buy" ? "HYPE amount" : "Token amount"}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-lg outline-none"
             />
-            <span className="px-3 text-sm text-muted-foreground">{tab === "buy" ? "ETH" : `$${info.symbol}`}</span>
+            <span className="px-3 text-sm text-muted-foreground">{tab === "buy" ? "HYPE" : `$${info.symbol}`}</span>
           </div>
           {tab === "buy" && parsed && ethUsd ? (
             <p className="mt-1 text-right text-xs text-muted-foreground">≈ {fmtUsd(Number(formatEther(parsed)) * ethUsd)}</p>
@@ -430,7 +426,7 @@ function TradePanel({
           <div className="flex justify-between">
             <dt className="text-muted-foreground">you receive ≈</dt>
             <dd className="tabular-nums">
-              {tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} ETH${inUsd(expected)}`}
+              {tab === "buy" ? `${fmtTokens(expected)} $${info.symbol}` : `${fmtEth(expected)} HYPE${inUsd(expected)}`}
             </dd>
           </div>
           <div className="flex items-center justify-between">
@@ -560,7 +556,7 @@ function TradesTable({ trades, symbol, ethUsd }: { trades: Trade[]; symbol: stri
               <tr className="border-b border-dashed border-border">
                 <th className="px-4 py-2 font-normal">time</th>
                 <th className="px-4 py-2 font-normal">type</th>
-                <th className="px-4 py-2 text-right font-normal">{ethUsd ? "USD" : "ETH"}</th>
+                <th className="px-4 py-2 text-right font-normal">{ethUsd ? "USD" : "HYPE"}</th>
                 <th className="px-4 py-2 text-right font-normal">${symbol}</th>
                 <th className="px-4 py-2 text-right font-normal">price</th>
                 <th className="px-4 py-2 font-normal">trader</th>

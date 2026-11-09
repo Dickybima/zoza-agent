@@ -8,7 +8,6 @@ import { fetchCurve, launchedTokenAbi, quoteSell, spotPrice } from "@/lib/curve"
 import type { CurveState } from "@/lib/curve";
 import { claimableBalance, feeEscrowAddress } from "@/lib/fees";
 import { useAllLaunches } from "@/lib/launches";
-import { OFFICIAL_ADDRESS } from "@/lib/official";
 import { readClient } from "@/lib/rpc";
 import { pageHidden } from "@/lib/visible";
 
@@ -24,9 +23,9 @@ export type Holding = {
   balance: bigint;
   curve: Address;
   state: CurveState | null;
-  /** ETH per token at the curve's spot price */
+  /** HYPE per token at the curve's spot price */
   priceEth: number;
-  /** what the bag is worth at spot, in ETH */
+  /** what the bag is worth at spot, in HYPE */
   valueEth: number;
   /** what selling it all into the curve would return now, after fees (wei) */
   exitEth: bigint;
@@ -49,7 +48,7 @@ async function inBatches<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<R[
 }
 
 /**
- * Everything `wallet` holds across Zoza: its ETH, its balance of every token
+ * Everything `wallet` holds across Zoza: its HYPE, its balance of every token
  * launched through Zoza (valued from each bonding curve), and its claimable
  * creator fees. Read on-chain and refreshed every 30 s.
  */
@@ -59,11 +58,10 @@ export function usePortfolio(wallet: string | null) {
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [tick, setTick] = useState(0);
 
-  // every Zoza token, the official one first
+  // every Zoza token, once each
   const list = useMemo(() => {
-    const seen = new Set<string>([OFFICIAL_ADDRESS.toLowerCase()]);
-    const rest = tokens.filter((t) => !seen.has(t.address.toLowerCase()) && seen.add(t.address.toLowerCase()));
-    return [{ address: OFFICIAL_ADDRESS as string, name: "Zoza", ticker: "ZOZA", curve: undefined as string | undefined, logo: "/icon.svg", creator: "" }, ...rest];
+    const seen = new Set<string>();
+    return tokens.filter((t) => !seen.has(t.address.toLowerCase()) && seen.add(t.address.toLowerCase()));
   }, [tokens]);
   const listKey = list.map((t) => t.address).join(",");
 

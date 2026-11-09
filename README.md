@@ -1,6 +1,6 @@
 # Zoza
 
-Landing page and demo for **Zoza** — an AI agent that launches tokens on **Robinhood Chain**.
+Landing page and app for **Zoza**: an AI agent that launches tokens on **Elysium**, Kinetiq's L2 on HyperEVM (HYPE gas).
 
 Built with **Next.js (App Router) · TypeScript · Tailwind CSS v4 · shadcn/ui**, themed as an ASCII terminal around the `VanishRun` tunnel hero (`components/ui/hero-ascii-tunnel.tsx`).
 
@@ -20,7 +20,10 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal, portfolio
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal, portfolio, bridge
+app/deploy/page.tsx  one-time launchpad deployment (not in the menu)
+contracts/           ZozaLaunchpad.sol: launch factory, token, bonding curve, fee escrow
+scripts/             compile-contracts.cjs (writes lib/launchpad-artifact.ts)
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
 hooks/               small client hooks
@@ -33,52 +36,71 @@ brand/               logo and X (Twitter) profile/header images
 
 shadcn is configured in `components.json` (aliases `@/components/ui`, `@/lib/utils`). New primitives can be added with `npx shadcn@latest add <component>` and will land in `components/ui/`.
 
+## Network
+
+Everything runs on **Elysium Testnet** (chain ID 99801, RPC `testnet-rpc.elysium.kinetiq.xyz`) until Elysium mainnet's public RPC is published. `lib/chain.ts` switches the whole site (launches, trading, fees, portfolio, the RPC proxy and the bridge) to **Elysium mainnet** (chain 99901) when `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` is set. `NEXT_PUBLIC_ELYSIUM_EXPLORER` overrides the explorer base URL (default `https://testnet.elysium.kinetiq.xyz/explorer`, linked as `/tx/…`, `/address/…`, `/token/…`).
+
+| Variable | Value |
+| --- | --- |
+| `NEXT_PUBLIC_ZOZA_FACTORY` | address of the Zoza launch factory on Elysium (see below) |
+| `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` | Elysium mainnet RPC; unset = testnet |
+| `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` | Elysium rollup contract on HyperEVM (bridge, mainnet) |
+| `NEXT_PUBLIC_ELYSIUM_EXPLORER` | optional explorer base URL |
+| `ZOZA_RPC_URL` | optional server-side RPC for `api/rpc.js` and `api/launches.mjs` |
+
+## Launchpad contracts
+
+Zoza runs its own launchpad on Elysium: `contracts/ZozaLaunchpad.sol` (Solidity 0.8.24).
+
+- **ZozaLaunchFactory** `launchToken(params, configId, address(0))` deploys a token and its curve, takes the launch fee (to the treasury), and keeps a registry: `allTokens`, `recentTokens(offset, count)`, `tokensBy(deployer)`, `launches(token)` (curve, deployer, block, time). The owner can change the launch fee, the creator-tax cap, the protocol's share of the base fee and the launch configs; existing curves keep their terms. `previewLaunchEconomics` pins the quoted terms for a launch.
+- **ZozaToken**: plain ERC-20 (18 decimals, 1B supply by default) with on-chain metadata (`getTokenInfo()`: deployer, logo URL, description, socials). Transfers to `0x0` and `burn()` lower the supply.
+- **ZozaCurve**: constant-product bonding curve with a virtual HYPE reserve (`phantomQuote`, 100 HYPE by default, which sets the starting market cap). The whole supply sits on the curve, `buy` / `sell` settle in native HYPE and emit `CurveBuy` / `CurveSell`. There is no migration to a DEX: tokens trade on their curve for good (`graduated()` is always false). Fees per trade: the base fee (1%, to the protocol by default) and the creator tax (2% from Zoza, capped at 5%), booked on the curve until anyone calls `sweepFees`.
+- **ZozaFeeEscrow**: holds swept fees; each recipient withdraws with `claim()`.
+
+The contracts haven't had a third-party audit.
+
+**Deploying.** Open `/deploy`, connect the wallet that should own the launchpad (it needs a little HYPE on Elysium for gas: bridge it from `/bridge`), set the launch fee and the starting virtual reserve, and confirm one transaction. Put the factory address it shows into `NEXT_PUBLIC_ZOZA_FACTORY` on Vercel and redeploy. Until then, the launch flows say the launchpad isn't live yet. After editing the contract, rebuild the deploy artifact with `npm i --no-save solc@0.8.24 && node scripts/compile-contracts.cjs`.
+
 ## Agent and on-chain launches
 
 The /agent page uses the MorphOrb component: type into the pill (e.g. `name: Moon Cat ticker: MEOW x: @mooncat website: mooncat.xyz`), the orb thinks, and Zoza's reply unfolds as a card. X and website can be skipped.
 
 Once the blueprint is complete, **Launch** sends a real transaction from the connected wallet:
 
-1. the wallet is switched to **Robinhood Chain** (chain ID 4663, added if missing);
-2. launch terms are read from the Pons V2 launch factory `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` (`canLaunch`, `launchFee`, `maxCreatorTaxBps`, the first enabled launch config, and `previewLaunchEconomics` to pin the quoted terms);
-3. `launchToken` is simulated, then sent for the user to confirm in their wallet, paying `launchFee` — the creator tax is 2% (`creatorTaxBps = 200`) paid to the creator's wallet;
+1. the wallet is switched to Elysium (added if missing);
+2. launch terms are read from the factory (`canLaunch`, `launchFee`, `maxCreatorTaxBps`, the first enabled launch config, `previewLaunchEconomics`);
+3. `launchToken` is simulated, then sent for the user to confirm in their wallet, paying `launchFee`; the creator tax is 2% (`creatorTaxBps = 200`) paid to the creator;
 4. the `TokenLaunched` event gives the token address, the token is added to **Explore** and the user is taken there.
 
-Chain reads go to Robinhood Chain's public RPC (and the wallet's RPC when connected) first. The same-origin proxy `api/rpc.js` (a Vercel Serverless Function forwarding read-only JSON-RPC methods to `rpc.mainnet.chain.robinhood.com`) is only a fallback: it joins when the direct sources fail or stay silent for 3 s, and takes over for a minute when the browser can't reach the public RPC at all. Small proxied reads go out as `GET /api/rpc?b=…` with a fixed id, which the edge caches for 4 s so concurrent visitors share one call. Polls (ticker, burn tracker, leaderboard, token pages, portfolio) skip their reads while the tab is in the background, and the burn stats are one shared poller. All of this keeps serverless usage inside Vercel's Hobby limits.
-
-See `lib/launchpad.ts` (factory ABI, source: github.com/Minh3132/pons-labs `contractsV2/src/v2/PonsV2LaunchFactory.sol`) and `lib/chain.ts` (RPC, explorer). Verify the factory address on the explorer before relying on it.
+Chain reads go to Elysium's public RPC (and the wallet's RPC when connected) first. The same-origin proxy `api/rpc.js` (a Vercel Serverless Function forwarding read-only JSON-RPC methods) is only a fallback: it joins when the direct sources fail or stay silent for 3 s, and takes over for a minute when the browser can't reach the public RPC at all. Small proxied reads go out as `GET /api/rpc?b=…` with a fixed id, which the edge caches for 4 s so concurrent visitors share one call. Polls skip their reads while the tab is in the background, which keeps serverless usage inside Vercel's Hobby limits.
 
 ### Token logos
 
-Creators upload their own logo in the blueprint panel (button or drag & drop). The browser center-crops it to a square and resizes it to 512×512 WEBP (`lib/upload.ts`), then `api/upload.mjs` checks it is a real PNG/JPG/WEBP/GIF under 1 MB and stores it in **Vercel Blob**, named by its content hash. The returned public URL becomes the token's on-chain `logo` (the launch factory caps that field at 512 bytes, so the image itself can't go on-chain). The logo is optional; tokens without one get a pattern derived from their address.
+Creators upload their own logo in the blueprint panel (button or drag & drop). The browser center-crops it to a square and resizes it to 512×512 WEBP (`lib/upload.ts`), then `api/upload.mjs` checks it is a real PNG/JPG/WEBP/GIF under 1 MB and stores it in **Vercel Blob**, named by its content hash. The returned public URL becomes the token's on-chain `logo`. The logo is optional; tokens without one get a pattern derived from their address.
 
-Uploads need a Blob store connected to the Vercel project: Storage → Create → Blob → connect it to this project, which adds `BLOB_READ_WRITE_TOKEN`; then redeploy. Without it, uploading shows "Logo uploads aren't set up on this site yet." Logos that are `ipfs://` or `ar://` links (from tokens launched elsewhere) are opened through public gateways (`lib/logo.ts`).
+Uploads need a Blob store connected to the Vercel project: Storage → Create → Blob → connect it to this project, which adds `BLOB_READ_WRITE_TOKEN`; then redeploy. Logos that are `ipfs://` or `ar://` links are opened through public gateways (`lib/logo.ts`).
 
 ### Tokenize
 
-`/tokenize` launches a token from a fomo (fomo.family) or pump.fun profile. Neither platform has an official API for reading profiles, so the creator pastes the profile link (`lib/profile.ts` checks the host and path, and prefills the name and ticker from the username) and uploads the picture themselves. The launch goes through the same factory call as the agent; the profile link is stored as the token's on-chain website and in its description (social links are capped at 256 bytes), and Explore labels the card with the platform. Profiles aren't verified, and the creator fee goes to the launching wallet.
-
-### $ZOZA holder leaderboard
-
-The home page ranks $ZOZA holders (`components/site/holder-board.tsx`). `api/holders.mjs` replays every `Transfer` of the token since its launch block (found from the factory's `TokenLaunched` event), so balances and badges come straight from the chain: 🐋 whale holds at least 1% of supply, 💎 diamond hands never sent tokens anywhere except to a burn address, 🔥 burner sent some to `0x0…dEaD` or `0x0`. Addresses with contract code (the bonding curve, the graduated pool, vaults) aren't ranked. The top 50 is edge-cached for a minute; `?me=0x…` adds the connected wallet's own rank.
+`/tokenize` launches a token from a fomo (fomo.family) or pump.fun profile. Neither platform has an official API for reading profiles, so the creator pastes the profile link (`lib/profile.ts` checks the host and path, and prefills the name and ticker from the username) and uploads the picture themselves. The launch goes through the same factory call as the agent; the profile link is stored as the token's on-chain website and in its description, and Explore labels the card with the platform. Profiles aren't verified, and the creator fee goes to the launching wallet.
 
 ### Portfolio
 
-`/portfolio` (`lib/portfolio.ts`) reads the connected wallet from Robinhood Chain: its ETH, its balance of every Zoza token (the official $ZOZA plus the shared launch list), each valued at its bonding curve's spot price with the "exit" value of selling it all into the curve after fees, its claimable creator fees from the fee escrow, and its $ZOZA leaderboard rank. Net worth, an allocation bar and a holdings table refresh every 30 s. Graduated tokens are listed but not priced.
+`/portfolio` (`lib/portfolio.ts`) reads the connected wallet from Elysium: its HYPE, its balance of every Zoza token in the shared launch list, each valued at its bonding curve's spot price with the "exit" value of selling it all into the curve after fees, and its claimable creator fees from the fee escrow. Net worth, an allocation bar and a holdings table refresh every 30 s.
 
 ### Terminal
 
-`/terminal` swaps Zoza tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 0.01 eth to zoza`, `buy zoza with 0.01 eth`, `swap 1m zoza to eth`, `sell 50% zoza`, `sell all zoza`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker, name or address against the shared launch list (`zoza` is always the official token). Every swap is quoted from the token's bonding curve first, needs a `y` to go ahead, and then runs through the same `trade()` as the token page (approve-then-sell for sells, 5% slippage). Graduated tokens are pointed to their token page.
+`/terminal` swaps Zoza tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 1 hype to meow`, `buy meow with 1 hype`, `swap 1m meow to hype`, `sell 50% meow`, `sell all meow`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker, name or address against the shared launch list. Every swap is quoted from the token's bonding curve first, needs a `y` to go ahead, and then runs through the same `trade()` as the token page (approve-then-sell for sells, 5% slippage).
 
 ### Claiming creator fees
 
-`/claim` (`lib/fees.ts`) shows a creator's fees. Each trade books the creator tax, plus the creator's share of the base fee, on the token's bonding curve; the creator can call the curve's `sweepFees(0)` to move it into the launchpad's shared fee escrow (`factory.feeEscrow()`), which works while no buyback is pending (Zoza launches have buyback off). Graduated pools pay into the same escrow. `claim()` on the escrow sends the wallet's whole ETH balance to it. The page lists the wallet's launches (from this browser, from `TokenLaunched` events filtered by deployer, or added by address), with a Collect button per token and a Claim all button that collects every token and then claims.
+`/claim` (`lib/fees.ts`) shows a creator's fees. Each trade books the creator tax (plus any creator share of the base fee) on the token's bonding curve; `sweepFees(0)` on the curve moves it into the shared fee escrow (`factory.feeEscrow()`), and `claim()` on the escrow sends the wallet's whole HYPE balance to it. The page lists the wallet's launches (from the factory's `tokensBy`, this browser, or added by address), with a Collect button per token and a Claim all button that collects every token and then claims.
 
 ### Token pages and trading
 
-`/token?address=0x…` reads everything from chain (`lib/curve.ts`): name, symbol, logo, description and socials from the token's `getTokenInfo()`, the bonding curve's reserves, fees and graduation progress, and its `CurveBuy` / `CurveSell` events, which drive the price line chart (lightweight-charts, 1m–1h buckets) and the transactions table. It refreshes every 8 s. Prices, market cap, liquidity and trade values are shown in USD using the ETH/USD rate from `api/eth-price.js` (Coinbase, falling back to CoinGecko and Kraken, edge-cached for 60 s); historical points use the current rate. The trade panel buys with ETH (`buy`) or sells (`approve` then `sell`) against the curve with a slippage bound; graduated tokens show a notice instead. Any token address can be opened from the Explore search box.
+`/token?address=0x…` reads everything from chain (`lib/curve.ts`): name, symbol, logo, description and socials from the token's `getTokenInfo()`, the bonding curve's reserves, fees and how much of the supply has been bought, and its `CurveBuy` / `CurveSell` events (from the launch block in the factory's registry), which drive the price line chart (lightweight-charts, 1m–1h buckets) and the transactions table. It refreshes every 8 s. Amounts are in HYPE; on mainnet they are also shown in USD using the HYPE/USD rate from `api/eth-price.js` (Hyperliquid, falling back to CoinGecko and Kraken, edge-cached for 60 s). The trade panel buys with HYPE (`buy`) or sells (`approve` then `sell`) against the curve with a slippage bound. Any token address can be opened from the Explore search box.
 
-The Explore feed lists every token launched through Zoza, on any device: `api/launches.mjs` scans the factory's `TokenLaunched` events (the last ~40M blocks, shrinking the range when the RPC rejects it), keeps the tokens whose on-chain description says "Launched with Zoza" (Zoza writes that into every launch), and is edge-cached for 60 s. The browser's own launches (localStorage) are merged in so a new token appears immediately.
+The Explore feed lists every token launched through Zoza, on any device: `api/launches.mjs` reads the newest 120 from the factory's registry (`recentTokens` + `launches`) with their on-chain metadata, edge-cached for 60 s. The browser's own launches (localStorage, kept per chain) are merged in so a new token appears immediately.
 
 ## Bridge (HyperEVM ↔ Elysium)
 
@@ -87,11 +109,6 @@ The Explore feed lists every token launched through Zoza, on any device: `api/la
 - **Deposit** (HyperEVM → Elysium): `Inbox.depositEth`, lands in about a minute.
 - **Withdraw** (Elysium → HyperEVM): `ArbSys.withdrawEth`, then **Claim** through `Outbox.executeTransaction` once the challenge period has passed (about a week on mainnet). Transfers are remembered in the browser; "find withdrawals" recovers them from Elysium logs.
 
-Testnet (HyperEVM Testnet 998 ↔ Elysium Testnet 99801) works out of the box. Mainnet switches on when these are set (e.g. in Vercel) and the site is redeployed:
-
-| Variable | Value |
-| --- | --- |
-| `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` | Elysium mainnet RPC URL (chain 99901) |
-| `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` | Elysium rollup contract address on HyperEVM |
+Testnet (HyperEVM Testnet 998 ↔ Elysium Testnet 99801) works out of the box. Mainnet switches on when `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` and `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` are set (see **Network**) and the site is redeployed.
 
 Both chain IDs and the rollup's parent chain are checked at runtime before any transaction is offered.

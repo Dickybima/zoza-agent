@@ -5,7 +5,7 @@ import { Portfolio } from "@/components/site/portfolio";
 
 export const metadata: Metadata = {
   title: "Portfolio",
-  description: "Everything your wallet holds across Zoza, read live from Robinhood Chain.",
+  description: "Everything your wallet holds across Zoza, read live from Elysium.",
 };
 
 export default function Page() {

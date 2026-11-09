@@ -5,7 +5,7 @@ import { PageShell } from "@/components/site/page-shell";
 
 export const metadata: Metadata = {
   title: "Network",
-  description: "Zoza runs natively on Robinhood Chain.",
+  description: "Zoza runs natively on Elysium.",
 };
 
 export default function Page() {

@@ -1,19 +1,17 @@
 // Vercel Serverless Function: every token launched through Zoza, read from
-// Robinhood Chain. Explore used to list only launches made in the visitor's
-// own browser; this scans the launch factory's TokenLaunched events and keeps
-// the tokens whose on-chain description says "Launched with Zoza" (Zoza writes
-// that into every token it launches). Cached at the edge for a minute.
+// Elysium. Zoza's launch factory (contracts/ZozaLaunchpad.sol) keeps a
+// registry of its launches, so this reads the newest ones straight from it —
+// no log scanning — with each token's on-chain metadata. Cached at the edge
+// for a minute.
 import { createPublicClient, http, parseAbi } from "viem";
 
-const RPC = process.env.ZOZA_RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
-const FACTORY = "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e";
-// how far back to look; launches are sparse, so wide ranges are cheap
-const LOOKBACK = BigInt(process.env.ZOZA_LOOKBACK_BLOCKS || 40_000_000);
+const RPC = process.env.ZOZA_RPC_URL || process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_RPC || "https://testnet-rpc.elysium.kinetiq.xyz";
+const FACTORY = process.env.NEXT_PUBLIC_ZOZA_FACTORY || "";
 const MAX_TOKENS = 120;
-const ZOZA_MARK = /launched with zoza/i;
 
 const factoryAbi = parseAbi([
-  "event TokenLaunched(address indexed token, address indexed curve, address indexed deployer, address pairToken, uint256 launchConfigId, uint256 graduationThreshold)",
+  "function recentTokens(uint256 offset, uint256 count) view returns (address[])",
+  "function launches(address token) view returns (address curve, address deployer, uint64 block, uint64 time)",
 ]);
 const tokenAbi = parseAbi([
   "struct Socials { string twitter; string telegram; string discord; string website; string farcaster; }",
@@ -22,27 +20,9 @@ const tokenAbi = parseAbi([
   "function getTokenInfo() view returns (address tokenDeployer, string tokenLogo, string tokenDescription, Socials tokenSocials)",
 ]);
 
-const client = createPublicClient({ transport: http(RPC, { timeout: 12_000, retryCount: 1 }) });
-
-/** TokenLaunched logs in [from, to], newest range first, shrinking a range the RPC rejects. */
-async function launchLogs(from, to) {
-  const out = [];
-  let size = BigInt(5_000_000);
-  let end = to;
-  while (end >= from) {
-    const start = end - size + BigInt(1) > from ? end - size + BigInt(1) : from;
-    try {
-      const logs = await client.getLogs({ address: FACTORY, event: factoryAbi[0], fromBlock: start, toBlock: end });
-      out.push(...logs.reverse());
-      if (out.length >= MAX_TOKENS * 4) break;
-      end = start - BigInt(1);
-    } catch (err) {
-      if (size <= BigInt(10_000)) throw err;
-      size /= BigInt(4);
-    }
-  }
-  return out;
-}
+const client = createPublicClient({
+  transport: http(RPC, { timeout: 12_000, retryCount: 1, fetchOptions: { headers: { "user-agent": "zoza-launches/1.0 (+https://usezoza.app)" } } }),
+});
 
 async function inBatches(items, n, fn) {
   const out = [];
@@ -60,57 +40,51 @@ function profileFrom(description, website) {
 }
 
 export default async function handler(req, res) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(FACTORY)) {
+    // launchpad not deployed yet: nothing to list
+    res.setHeader("cache-control", "public, s-maxage=60");
+    return res.status(200).json({ head: 0, tokens: [] });
+  }
   try {
-    const head = await client.getBlockNumber();
-    const from = head > LOOKBACK ? head - LOOKBACK : BigInt(0);
-    const logs = (await launchLogs(from, head)).slice(0, MAX_TOKENS * 4);
-
-    const tokens = await inBatches(logs, 8, async (l) => {
+    const [head, addresses] = await Promise.all([
+      client.getBlockNumber(),
+      client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "recentTokens", args: [BigInt(0), BigInt(MAX_TOKENS)] }),
+    ]);
+    const tokens = await inBatches([...addresses], 8, async (address) => {
       try {
-        const t = { address: l.args.token, abi: tokenAbi };
-        const [name, symbol, info] = await Promise.all([
+        const t = { address, abi: tokenAbi };
+        const [name, symbol, info, launch] = await Promise.all([
           client.readContract({ ...t, functionName: "name" }),
           client.readContract({ ...t, functionName: "symbol" }),
           client.readContract({ ...t, functionName: "getTokenInfo" }),
+          client.readContract({ address: FACTORY, abi: factoryAbi, functionName: "launches", args: [address] }),
         ]);
         const [, logo, description, socials] = info;
-        if (!ZOZA_MARK.test(description)) return null;
+        const [curve, deployer, block, time] = launch;
         const website = siteFrom(socials.website);
         return {
           name,
           ticker: symbol,
           x: handleFrom(socials.twitter),
           website,
-          address: l.args.token,
-          curve: l.args.curve,
+          address,
+          curve,
           logo: logo || undefined,
-          block: Number(l.blockNumber),
-          creator: l.args.deployer,
-          tx: l.transactionHash,
+          block: Number(block),
+          creator: deployer,
+          tx: "",
+          createdAt: Number(time) * 1000,
           profile: profileFrom(description, website),
         };
       } catch {
         return null;
       }
     });
-    const zoza = tokens.filter(Boolean).slice(0, MAX_TOKENS);
-
-    // launch times, one block read per distinct block
-    const times = new Map();
-    await inBatches([...new Set(zoza.map((t) => t.block))], 8, async (b) => {
-      try {
-        const block = await client.getBlock({ blockNumber: BigInt(b) });
-        times.set(b, Number(block.timestamp) * 1000);
-      } catch {
-        // leave it out; the card shows no age
-      }
-    });
-    for (const t of zoza) t.createdAt = times.get(t.block) ?? 0;
 
     res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=600");
-    return res.status(200).json({ head: Number(head), tokens: zoza });
+    return res.status(200).json({ head: Number(head), tokens: tokens.filter(Boolean) });
   } catch {
     res.setHeader("cache-control", "no-store");
-    return res.status(502).json({ error: "Robinhood Chain did not respond." });
+    return res.status(502).json({ error: "Elysium did not respond." });
   }
 }

@@ -2,16 +2,22 @@
 
 import { useEffect, useState } from "react";
 
-// ETH/USD for displaying prices in dollars. Read from Zoza's /api/eth-price
-// (cached server-side), falling back to Coinbase's public API from the browser.
+import { IS_TESTNET } from "@/lib/chain";
+
+// HYPE/USD for displaying prices in dollars (HYPE is Elysium's gas and quote
+// currency; the "eth" names are historical). Read from Zoza's /api/eth-price
+// (cached server-side), falling back to CoinGecko from the browser. On
+// Elysium Testnet, HYPE has no dollar value, so amounts stay in HYPE.
+
 let cached: { usd: number; at: number } | null = null;
 const MAX_AGE = 60_000;
 
 async function fetchEthUsd(): Promise<number | null> {
+  if (IS_TESTNET) return null;
   if (cached && Date.now() - cached.at < MAX_AGE) return cached.usd;
   const tries: [string, (j: never) => unknown][] = [
     ["/api/eth-price", (j: { usd: number }) => j.usd],
-    ["https://api.coinbase.com/v2/prices/ETH-USD/spot", (j: { data: { amount: string } }) => j.data.amount],
+    ["https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid&vs_currencies=usd", (j: { hyperliquid: { usd: number } }) => j.hyperliquid.usd],
   ];
   for (const [url, pick] of tries) {
     try {
@@ -29,7 +35,7 @@ async function fetchEthUsd(): Promise<number | null> {
   return cached?.usd ?? null;
 }
 
-/** Current ETH price in USD (null until known), refreshed every minute. */
+/** Current HYPE price in USD (null until known), refreshed every minute. */
 export function useEthUsd() {
   const [usd, setUsd] = useState<number | null>(cached?.usd ?? null);
   useEffect(() => {

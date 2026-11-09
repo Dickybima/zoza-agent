@@ -20,7 +20,7 @@ export function Hero() {
         </h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
           A name, a ticker, a link to your world. Zoza writes the contract, wires your 2% creator
-          share, and mints it on Robinhood Chain before your coffee cools.
+          share, and mints it on Elysium before your coffee cools.
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <Button asChild>

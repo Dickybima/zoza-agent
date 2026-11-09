@@ -15,7 +15,7 @@ export function SiteFooter() {
           ZOZA
         </div>
         <p className="text-xs text-muted-foreground">
-          © {year} zoza agent <span className="text-signal">{"//"}</span> engineered on robinhood chain
+          © {year} zoza agent <span className="text-signal">{"//"}</span> engineered on elysium
         </p>
         <nav className="flex gap-5 text-muted-foreground">
           {LINKS.map((l) => (

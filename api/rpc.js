@@ -1,8 +1,9 @@
-// Vercel Serverless Function: same-origin JSON-RPC proxy to Robinhood Chain.
+// Vercel Serverless Function: same-origin JSON-RPC proxy to Elysium (Kinetiq's
+// L2; testnet until NEXT_PUBLIC_ELYSIUM_MAINNET_RPC is set).
 // Browsers may not be able to call the public RPC directly (CORS / rate
 // limits), so the launch flow reads chain state through here. Read-only
 // methods only — transactions are always signed and sent by the user's wallet.
-const UPSTREAM = "https://rpc.mainnet.chain.robinhood.com";
+const UPSTREAM = process.env.ZOZA_RPC_URL || process.env.NEXT_PUBLIC_ELYSIUM_MAINNET_RPC || "https://testnet-rpc.elysium.kinetiq.xyz";
 const ALLOWED = new Set([
   "eth_chainId",
   "net_version",
@@ -46,7 +47,7 @@ module.exports = async function handler(req, res) {
   try {
     const upstream = await fetch(UPSTREAM, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "user-agent": "zoza-rpc-proxy/1.0 (+https://usezoza.app)" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     });
@@ -55,6 +56,6 @@ module.exports = async function handler(req, res) {
     res.setHeader("cache-control", req.method === "GET" && upstream.ok ? GET_CACHE : "no-store");
     return res.status(upstream.status).send(text);
   } catch {
-    return res.status(502).json({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Robinhood Chain RPC unavailable" } });
+    return res.status(502).json({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Elysium RPC unavailable" } });
   }
 };

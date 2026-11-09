@@ -3,14 +3,17 @@
 import { useSyncExternalStore } from "react";
 
 import type { LaunchedToken } from "@/lib/agent";
+import { zozaChain } from "@/lib/chain";
 
 // Every token launched through the agent is published to Explore. The feed
 // lives in this browser's localStorage (with an in-memory fallback); a feed
-// shared by every visitor would index the launch factory's TokenLaunched
-// events on Robinhood Chain. Bumping the version starts every browser with
-// an empty list (v1: simulated launches, v2–v3: lists cleared on request).
-const STORE_KEY = "zoza.tokens.v4";
-const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2", "zoza.tokens.v3"];
+// shared by every visitor comes from the launch factory's registry (see
+// lib/launches.ts). Bumping the version starts every browser with an empty
+// list (v1: simulated launches, v2–v3: lists cleared on request, v4: Robinhood
+// Chain launches). From v5 the list is kept per chain, so testnet and mainnet
+// launches never mix.
+const STORE_KEY = `zoza.tokens.v5.${zozaChain.id}`;
+const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2", "zoza.tokens.v3", "zoza.tokens.v4"];
 const EMPTY: LaunchedToken[] = [];
 
 // drop earlier lists so they don't linger in storage

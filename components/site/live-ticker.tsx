@@ -1,34 +1,62 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { formatEther } from "viem";
 
-import { useBurnStats } from "@/lib/burn";
-import { fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
-import { useMarket } from "@/lib/market";
-import { OFFICIAL_ADDRESS } from "@/lib/official";
+import { CHAIN_NAME, NATIVE, zozaChain } from "@/lib/chain";
+import { fmtUsd } from "@/lib/format";
+import { LAUNCHPAD_LIVE, LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
+import { readClient } from "@/lib/rpc";
+import { pageHidden } from "@/lib/visible";
 import { useEthUsd } from "@/hooks/use-eth-usd";
 
-// A scrolling strip of live $ZOZA figures, all read on-chain.
+const POLL_MS = 30_000;
+
+// A scrolling strip of live Elysium figures, all read on-chain.
 export function LiveTicker() {
-  const market = useMarket(OFFICIAL_ADDRESS);
-  const burn = useBurnStats(OFFICIAL_ADDRESS);
-  const ethUsd = useEthUsd();
+  const hypeUsd = useEthUsd();
+  const [head, setHead] = useState<bigint | null>(null);
+  const [launched, setLaunched] = useState<bigint | null>(null);
 
-  const burned = Number(formatEther(burn.burned));
-  const supply = Number(formatEther(burn.initialSupply));
-  const priceUsd = market.priceEth !== null && ethUsd ? market.priceEth * ethUsd : null;
-  const known = burn.status === "ok";
+  useEffect(() => {
+    const client = readClient();
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let loaded = false;
+    const refresh = async () => {
+      try {
+        if (loaded && pageHidden()) return;
+        const [h, n] = await Promise.all([
+          client.getBlockNumber(),
+          LAUNCHPAD_LIVE ? client.readContract({ address: LAUNCH_FACTORY, abi: launchFactoryAbi, functionName: "tokenCount" }) : Promise.resolve(null),
+        ]);
+        loaded = true;
+        if (live) {
+          setHead(h);
+          setLaunched(n);
+        }
+      } catch {
+        // keep the last reading; placeholders until one arrives
+      } finally {
+        if (live) timer = setTimeout(refresh, POLL_MS);
+      }
+    };
+    refresh();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
   const dash = "···";
-
   const items: [string, string, boolean?][] = [
-    ["$ZOZA", priceUsd !== null ? fmtUsdPrice(priceUsd) : dash, true],
-    ["circ mcap", priceUsd !== null && known ? fmtUsd(priceUsd * (supply - burned)) : dash],
-    ["burned", known ? `${fmtTokens(burn.burned)} (${((burned / supply) * 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%)` : dash, true],
-    ["status", market.graduated ? "graduated" : "bonding curve"],
-    ["eth", ethUsd ? fmtUsd(ethUsd) : dash],
-    ["block", market.head !== null ? `#${market.head.toLocaleString("en-US")}` : dash],
-    ["", "buy · burn · repeat 🔥"],
+    ["network", CHAIN_NAME, true],
+    ["chain id", String(zozaChain.id)],
+    ["gas", NATIVE],
+    ...(hypeUsd ? [["hype", fmtUsd(hypeUsd)] as [string, string]] : []),
+    ["tokens launched", LAUNCHPAD_LIVE ? (launched !== null ? launched.toLocaleString("en-US") : dash) : "soon", true],
+    ["block", head !== null ? `#${head.toLocaleString("en-US")}` : dash],
+    ["", "hyperevm ⇄ elysium bridge live"],
     ["", "say the word. it’s on-chain."],
   ];
 
@@ -46,8 +74,8 @@ export function LiveTicker() {
 
   return (
     <Link
-      href={`/token?address=${OFFICIAL_ADDRESS}`}
-      aria-label="Live $ZOZA market data. Open the $ZOZA token page."
+      href="/explore"
+      aria-label={`Live ${CHAIN_NAME} data. Open Explore.`}
       className="group relative flex h-7 items-center overflow-hidden border-b border-border bg-background text-[11px] uppercase tracking-[0.14em]"
     >
       <span className="relative z-10 flex h-full shrink-0 items-center gap-1.5 border-r border-border bg-background px-3 font-semibold text-signal">

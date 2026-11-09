@@ -6,7 +6,7 @@ export const PAGES: NavPage[] = [
   { href: "/how-it-works", label: "How it works", index: "02", blurb: "Four commands. One flawless launch." },
   { href: "/agent", label: "Agent", index: "03", blurb: "Converse with Zoza and launch a token." },
   { href: "/explore", label: "Explore", index: "04", blurb: "Every token born through Zoza." },
-  { href: "/network", label: "Network", index: "05", blurb: "Built natively on Robinhood Chain." },
+  { href: "/network", label: "Network", index: "05", blurb: "Built natively on Elysium." },
   { href: "/tokenize", label: "Tokenize", index: "06", blurb: "Turn a fomo or pump.fun profile into a token." },
   { href: "/claim", label: "Claim", index: "07", blurb: "Collect the creator fees your tokens earned." },
   { href: "/terminal", label: "Terminal", index: "08", blurb: "Swap any Zoza token by just saying it." },

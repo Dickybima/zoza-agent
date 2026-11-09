@@ -7,7 +7,7 @@ import { formatEther, getAddress, isAddress } from "viem";
 import type { Address } from "viem";
 
 import { CREATOR_FEE, shortAddr } from "@/lib/agent";
-import { explorerTx } from "@/lib/chain";
+import { EXPLORER, explorerTx } from "@/lib/chain";
 import { claimFees, claimableBalance, feeEscrowAddress, findLaunchesBy, readCreatorToken, sweepCreatorFees } from "@/lib/fees";
 import type { CreatorToken } from "@/lib/fees";
 import { fmtEth, fmtUsd } from "@/lib/format";
@@ -69,7 +69,7 @@ export function Claim() {
       ]);
       setData({ escrow, claimable, tokens: tokens.filter((t): t is CreatorToken => !!t) });
     } catch (err) {
-      setLoadError((err as Error).message || "Couldn’t read your fees from Robinhood Chain.");
+      setLoadError((err as Error).message || "Couldn’t read your fees from Elysium.");
     } finally {
       setLoading(false);
     }
@@ -88,7 +88,7 @@ export function Claim() {
       setScanning(true);
       try {
         const client = readClient();
-        const list = await findLaunchesBy(client, wallet, await client.getBlockNumber());
+        const list = await findLaunchesBy(client, wallet);
         if (live) setFound(list);
       } catch {
         // best effort; local launches and manual adds still work
@@ -133,7 +133,7 @@ export function Claim() {
     if (!data) return;
     const steps = collectable.map((t) => (s: (x: string) => void) => sweepCreatorFees(getProvider()!, wallet!, t.curve, (st) => s(`$${t.symbol}: ${st}`)));
     steps.push((s) => claimFees(getProvider()!, wallet!, data.escrow, s));
-    run("claim", steps, `Claimed ${fmtEth(total)} ETH to ${shortAddr(wallet!)}.`);
+    run("claim", steps, `Claimed ${fmtEth(total)} HYPE to ${shortAddr(wallet!)}.`);
   };
 
   const addToken = () => {
@@ -170,7 +170,7 @@ export function Claim() {
                   <span className="text-signal">›</span> total
                 </p>
                 <p className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">
-                  {data ? `${fmtEth(total)} ETH` : "···"}
+                  {data ? `${fmtEth(total)} HYPE` : "···"}
                 </p>
                 {data && usd(total) ? <p className="text-xs text-muted-foreground">≈ {usd(total)}</p> : null}
               </div>
@@ -212,7 +212,7 @@ export function Claim() {
               <span className="text-foreground">your launches</span>
               {scanning ? (
                 <span className="flex items-center gap-1.5">
-                  <LoaderIcon className="size-3 animate-spin" /> searching Robinhood Chain…
+                  <LoaderIcon className="size-3 animate-spin" /> searching Elysium…
                 </span>
               ) : null}
               <button type="button" onClick={load} disabled={loading} className="ml-auto flex items-center gap-1.5 hover:text-foreground disabled:opacity-50">
@@ -237,7 +237,7 @@ export function Claim() {
                       </Link>
                       <Badge>{t.graduated ? "graduated" : "bonding curve"}</Badge>
                       <div className="w-36 text-right">
-                        <p className="font-semibold tabular-nums">{t.graduated ? "—" : `${fmtEth(t.pending)} ETH`}</p>
+                        <p className="font-semibold tabular-nums">{t.graduated ? "—" : `${fmtEth(t.pending)} HYPE`}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {!yours
                             ? `fees go to ${shortAddr(t.recipient)}`
@@ -283,10 +283,10 @@ export function Claim() {
 
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
             Collect moves a token’s fees from its bonding curve into your claimable balance; Claim all does that for every token
-            and then sends the balance to your wallet. Graduated tokens pay their pool fees into the same balance.{" "}
+            and then sends the balance to your wallet.{" "}
             {data ? (
               <a
-                href={`https://robinhoodchain.blockscout.com/address/${data.escrow}`}
+                href={`${EXPLORER}/address/${data.escrow}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-0.5 text-foreground hover:text-signal"
@@ -307,7 +307,7 @@ function Stat({ label, wei, usd, loading }: { label: string; wei: bigint; usd: s
       <p className="text-xs text-muted-foreground">
         <span className="text-signal">›</span> {label}
       </p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">{loading ? "···" : `${fmtEth(wei)} ETH`}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">{loading ? "···" : `${fmtEth(wei)} HYPE`}</p>
       {!loading && usd ? <p className="text-xs text-muted-foreground">≈ {usd}</p> : null}
     </div>
   );

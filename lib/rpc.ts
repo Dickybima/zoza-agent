@@ -1,11 +1,11 @@
-// Shared Robinhood Chain plumbing for launches and trading: a read client that
+// Shared Elysium plumbing for launches and trading: a read client that
 // races several RPC sources, wallet network switching, timeouts, and turning
 // wallet / RPC failures into readable messages.
 import { BaseError, InsufficientFundsError, UserRejectedRequestError, createPublicClient, custom, toHex } from "viem";
 import type { EIP1193Provider } from "viem";
 
 import { shortAddr } from "@/lib/agent";
-import { robinhoodChain } from "@/lib/chain";
+import { CHAIN_NAME, NATIVE, zozaChain } from "@/lib/chain";
 import { fmtEth } from "@/lib/format";
 
 export class ChainError extends Error {
@@ -18,8 +18,8 @@ export class ChainError extends Error {
   }
 }
 
-const CHAIN_HEX = toHex(robinhoodChain.id);
-export const RPC_URL = robinhoodChain.rpcUrls.default.http[0];
+const CHAIN_HEX = toHex(zozaChain.id);
+export const RPC_URL = zozaChain.rpcUrls.default.http[0];
 
 /** Rejects with `message` if `promise` has not settled within `ms`. */
 export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -69,7 +69,7 @@ function httpSource(name: string, url: string, cacheableGet = false): RpcSource 
 }
 
 /**
- * Read transport: asks the direct sources first (Robinhood Chain's public RPC
+ * Read transport: asks the direct sources first (Elysium's public RPC
  * and, when connected, the wallet's own RPC) and takes the first answer. Zoza's
  * same-origin proxy (api/rpc.js) is only a fallback, joining when the direct
  * sources fail or haven't answered within HEDGE_MS, since every proxied read is
@@ -132,15 +132,14 @@ export function readClient(provider?: EIP1193Provider | null) {
   if (provider) {
     direct.push({ name: "wallet", request: (req) => provider.request(req as Parameters<EIP1193Provider["request"]>[0]) });
   }
-  return createPublicClient({ chain: robinhoodChain, transport: hedgedReads(direct, httpSource("zoza-proxy", "/api/rpc", true)), pollingInterval: 2_000 });
+  return createPublicClient({ chain: zozaChain, transport: hedgedReads(direct, httpSource("zoza-proxy", "/api/rpc", true)), pollingInterval: 2_000 });
 }
 
-export const WRONG_NETWORK =
-  "Your wallet is not on Robinhood Chain. Switch it to Robinhood Chain (chain ID 4663) — or use a wallet that supports custom networks, such as MetaMask or Rabby — then try again.";
+export const WRONG_NETWORK = `Your wallet is not on ${CHAIN_NAME}. Switch it to ${CHAIN_NAME} (chain ID ${zozaChain.id}) — or use a wallet that supports custom networks, such as MetaMask or Rabby — then try again.`;
 
-/** Switches the wallet to Robinhood Chain, adding the network if it is unknown. */
-async function switchToRobinhood(provider: EIP1193Provider) {
-  const onChain = async () => Number(await provider.request({ method: "eth_chainId" })) === robinhoodChain.id;
+/** Switches the wallet to Elysium, adding the network if it is unknown. */
+async function switchToElysium(provider: EIP1193Provider) {
+  const onChain = async () => Number(await provider.request({ method: "eth_chainId" })) === zozaChain.id;
   if (await onChain()) return;
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
@@ -153,15 +152,15 @@ async function switchToRobinhood(provider: EIP1193Provider) {
         params: [
           {
             chainId: CHAIN_HEX,
-            chainName: robinhoodChain.name,
-            nativeCurrency: robinhoodChain.nativeCurrency,
+            chainName: zozaChain.name,
+            nativeCurrency: zozaChain.nativeCurrency,
             rpcUrls: [RPC_URL],
-            blockExplorerUrls: [robinhoodChain.blockExplorers.default.url],
+            blockExplorerUrls: [zozaChain.blockExplorers.default.url],
           },
         ],
       });
     } catch (addErr) {
-      if ((addErr as { code?: number }).code === 4001) throw new ChainError("Adding Robinhood Chain was rejected in your wallet.", true);
+      if ((addErr as { code?: number }).code === 4001) throw new ChainError(`Adding ${CHAIN_NAME} was rejected in your wallet.`, true);
       throw new ChainError(WRONG_NETWORK);
     }
   }
@@ -170,9 +169,9 @@ async function switchToRobinhood(provider: EIP1193Provider) {
 }
 
 /** Same, bounded: the switch may wait on a wallet prompt, so allow the user time. */
-export const ensureChain = (provider: EIP1193Provider) => withTimeout(switchToRobinhood(provider), 90_000, WRONG_NETWORK);
+export const ensureChain = (provider: EIP1193Provider) => withTimeout(switchToElysium(provider), 90_000, WRONG_NETWORK);
 
-export const NO_RPC = "Robinhood Chain did not respond. Check your connection and try again.";
+export const NO_RPC = `${CHAIN_NAME} did not respond. Check your connection and try again.`;
 
 export const isInsufficientFunds = (err: unknown) =>
   (err instanceof BaseError && !!err.walk((e) => e instanceof InsufficientFundsError)) ||
@@ -181,12 +180,12 @@ export const isInsufficientFunds = (err: unknown) =>
 /** Readable "top up your wallet" error with the amounts involved. */
 export const notEnoughEth = (need: bigint, have: bigint, account: string) =>
   new ChainError(
-    `Not enough ETH on Robinhood Chain: this needs ${fmtEth(need)} ETH plus gas, and ${shortAddr(account)} holds ${fmtEth(have)} ETH. ` +
-      "Send or bridge ETH to this wallet on Robinhood Chain (chain ID 4663), then try again.",
+    `Not enough ${NATIVE} on ${CHAIN_NAME}: this needs ${fmtEth(need)} ${NATIVE} plus gas, and ${shortAddr(account)} holds ${fmtEth(have)} ${NATIVE}. ` +
+      `Bridge ${NATIVE} to this wallet on ${CHAIN_NAME} (chain ID ${zozaChain.id}) from the Bridge page, then try again.`,
   );
 
 /**
- * Simulates a payable call. Arbitrum-based nodes (Robinhood Chain is an
+ * Simulates a payable call. Arbitrum-based nodes (Elysium is an
  * Arbitrum Orbit chain) price an eth_call without a gas limit at the RPC's
  * gas cap, so a wallet that can easily afford the real transaction may be
  * refused as "insufficient funds". Retry once with a realistic gas limit and
@@ -209,10 +208,10 @@ export function toChainError(err: unknown): ChainError {
       return new ChainError("Transaction rejected in your wallet.", true);
     }
     if (isInsufficientFunds(err)) {
-      return new ChainError("Not enough ETH on Robinhood Chain to cover this transaction plus gas. Top up this wallet on Robinhood Chain (chain ID 4663), then try again.");
+      return new ChainError(`Not enough ${NATIVE} on ${CHAIN_NAME} to cover this transaction plus gas. Bridge ${NATIVE} to this wallet on ${CHAIN_NAME} (chain ID ${zozaChain.id}), then try again.`);
     }
     if (/unknown RPC error|HTTP request failed|took too long/i.test(err.shortMessage)) {
-      return new ChainError("Couldn’t reach Robinhood Chain from your browser or your wallet. Check your connection, then try again.");
+      return new ChainError(`Couldn’t reach ${CHAIN_NAME} from your browser or your wallet. Check your connection, then try again.`);
     }
     return new ChainError(err.shortMessage);
   }

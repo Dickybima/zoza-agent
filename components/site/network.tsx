@@ -6,10 +6,10 @@ import { useTokens } from "@/lib/tokens";
 import { Section, SectionHeading } from "@/components/site/section";
 
 const CHECKS = [
-  "Near-instant transaction finality",
-  "Gas fees you’ll barely notice",
-  "Aligned with global token standards",
-  "Publicly verified contracts",
+  "HYPE for gas, bridged in from HyperEVM in about a minute",
+  "Settles to HyperEVM as a Kinetiq rollup",
+  "Standard ERC-20 tokens, tradable from block one",
+  "Zoza’s own launchpad contracts, open on-chain",
 ];
 
 const pad = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s + " ".repeat(n - s.length));
@@ -38,7 +38,7 @@ function AsciiChain() {
   return (
     <div className="overflow-x-auto border border-border bg-card/50 p-5 sm:p-6">
       <p className="mb-5 flex items-center justify-between text-xs text-muted-foreground">
-        <span>robinhood-chain://blocks</span>
+        <span>elysium://blocks</span>
         <span className="flex items-center gap-2 text-signal">
           <span className="size-1.5 animate-pulse rounded-full bg-signal" /> syncing
         </span>
@@ -64,9 +64,9 @@ export function Network() {
     <Section id="network">
       <div className="grid items-center gap-12 lg:grid-cols-2">
         <div>
-          <SectionHeading index="05" label="Built on Robinhood Chain" title="Standing on a foundation designed for scale." className="mb-6">
-            Zoza runs natively on Robinhood Chain — a network that unites speed, efficiency, and openness. Every token created is a fully
-            sovereign on-chain asset: transparent, verifiable, and ready to enter the ecosystem from its very first second.
+          <SectionHeading index="05" label="Built on Elysium" title="Standing on a foundation designed for scale." className="mb-6">
+            Zoza runs natively on Elysium, Kinetiq’s L2 on HyperEVM, where HYPE is the gas. Every token created is a fully sovereign
+            on-chain asset: transparent, verifiable, and tradable on its bonding curve from its very first second.
           </SectionHeading>
           <ul className="space-y-2.5 text-sm">
             {CHECKS.map((c) => (

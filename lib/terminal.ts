@@ -1,7 +1,7 @@
 // Command parser for the Zoza terminal. Swaps go through a token's bonding
-// curve, so one side of every swap is ETH:
-//   swap 0.01 eth to zoza      buy 0.01 eth of zoza      buy zoza with 0.01 eth
-//   swap 1m zoza to eth        sell 50% zoza             sell all $zoza
+// curve, so one side of every swap is HYPE:
+//   swap 1 hype to test      buy 1 hype of test      buy test with 1 hype
+//   swap 1m test to hype        sell 50% test             sell all $test
 // plus price, balance, tokens, connect, help and clear.
 
 export type Amount = { type: "abs"; value: string } | { type: "pct"; pct: number };
@@ -18,7 +18,7 @@ export type Command =
   | { kind: "error"; message: string };
 
 const NUM = String.raw`(\d+(?:[.,]\d+)?|\.\d+)\s*([kmb])?`;
-const ETH = String.raw`(?:eth|ether|Ξ)`;
+const ETH = String.raw`(?:hype|eth)`; // "eth" kept as a habit-friendly alias
 const TOKEN = String.raw`(\$?[a-z0-9]{1,16}|0x[a-f0-9]{40})`;
 const TO = String.raw`(?:to|for|into|->|→|=>)`;
 
@@ -61,16 +61,16 @@ export function parseCommand(input: string): Command {
   m = s.match(new RegExp(`^(?:price|chart|info)(?: of)? ${TOKEN}$`));
   if (m) return { kind: "price", token: cleanToken(m[1]) };
 
-  // ETH → token
+  // HYPE → token
   m =
     s.match(new RegExp(`^(?:swap|trade|convert|buy|ape) ${NUM} ?${ETH} (?:${TO}|of|worth of|in) ${TOKEN}$`)) ??
     s.match(new RegExp(`^(?:buy|ape) ${NUM} ?${ETH} ${TOKEN}$`));
-  if (m && /^(eth|ether)$/.test(cleanToken(m[3]))) return { kind: "error", message: "That’s ETH to ETH. Name a token, e.g. swap 0.01 eth to zoza." };
+  if (m && /^(hype|eth)$/.test(cleanToken(m[3]))) return { kind: "error", message: "That’s HYPE to HYPE. Name a token, e.g. swap 1 hype to test." };
   if (m) return { kind: "buy", token: cleanToken(m[3]), eth: expandNumber(m[1], m[2]) };
   m = s.match(new RegExp(`^(?:buy|ape(?: into)?) ${TOKEN} (?:with|for|using) ${NUM} ?${ETH}$`));
   if (m) return { kind: "buy", token: cleanToken(m[1]), eth: expandNumber(m[2], m[3]) };
 
-  // token → ETH
+  // token → HYPE
   m = s.match(new RegExp(`^(?:swap|trade|convert|sell|dump) (.+?) ${TOKEN}(?: (?:${TO}) ${ETH})?$`));
   if (m && !new RegExp(`^${ETH}$`).test(m[2])) {
     const amount = parseAmount(m[1]);
@@ -80,11 +80,11 @@ export function parseCommand(input: string): Command {
   if (m) return { kind: "sell", token: cleanToken(m[1]), amount: { type: "pct", pct: 100 } };
 
   if (/^(buy|swap|trade|ape)\b/.test(s) && !new RegExp(ETH).test(s)) {
-    return { kind: "error", message: "Say how much ETH to spend, e.g. swap 0.01 eth to zoza." };
+    return { kind: "error", message: "Say how much HYPE to spend, e.g. swap 1 hype to test." };
   }
   if (/^(sell|dump)\b/.test(s)) return { kind: "error", message: "Say how much to sell, e.g. sell 50% zoza or sell 1m zoza." };
   return { kind: "error", message: `Unknown command. Type help to see what I can do.` };
 }
 
 /** Commands shown as clickable examples. */
-export const EXAMPLES = ["swap 0.01 eth to zoza", "sell 50% zoza", "price zoza", "balance", "tokens", "help"];
+export const EXAMPLES = ["swap 1 hype to test", "sell 50% test", "price test", "balance", "tokens", "help"];

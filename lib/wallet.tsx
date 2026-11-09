@@ -20,7 +20,6 @@ type Eip1193Provider = {
   isMetaMask?: boolean;
   isRabby?: boolean;
   isCoinbaseWallet?: boolean;
-  isRobinhood?: boolean;
 };
 type ProviderDetail = {
   info: { uuid?: string; name: string; icon?: string; rdns?: string };
@@ -37,7 +36,6 @@ type WalletDef = {
 };
 
 const WALLETS: WalletDef[] = [
-  { id: "robinhood", name: "Robinhood Wallet", match: /robinhood/i, legacy: (e) => e.isRobinhood, install: "https://robinhood.com/us/en/web3-wallet/" },
   { id: "metamask", name: "MetaMask", rdns: "io.metamask", legacy: (e) => e.isMetaMask && !e.isRabby, install: "https://metamask.io/download/" },
   { id: "coinbase", name: "Coinbase Wallet", rdns: "com.coinbase.wallet", legacy: (e) => e.isCoinbaseWallet, install: "https://www.coinbase.com/wallet/downloads" },
   { id: "rabby", name: "Rabby Wallet", rdns: "io.rabby", legacy: (e) => e.isRabby, install: "https://rabby.io/" },
@@ -189,7 +187,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             <DialogTitle>
               <span className="text-signal">$</span> connect --wallet
             </DialogTitle>
-            <DialogDescription>Choose how you’d like to connect to Robinhood Chain.</DialogDescription>
+            <DialogDescription>Choose how you’d like to connect to Elysium.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-2">

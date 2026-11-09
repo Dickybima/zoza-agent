@@ -5,7 +5,7 @@ import { Terminal } from "@/components/site/terminal";
 
 export const metadata: Metadata = {
   title: "Terminal",
-  description: "Swap Zoza tokens on Robinhood Chain by typing what you want.",
+  description: "Swap Zoza tokens on Elysium by typing what you want.",
 };
 
 export default function Page() {

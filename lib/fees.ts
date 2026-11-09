@@ -1,15 +1,14 @@
 // Creator fees. Every trade on a bonding curve books its creator tax (plus the
 // creator's share of the base fee) on the curve itself; `sweepFees` moves that
-// into the launchpad's shared fee escrow, which the creator may call while no
-// buyback is pending (Zoza launches have buyback off). Graduated pools pay
-// their fees into the same escrow. `claim()` on the escrow then sends the
-// whole ETH balance to the creator's wallet.
+// into the launchpad's shared fee escrow (anyone may call it; the money only
+// goes to the creator and the protocol). `claim()` on the escrow then sends
+// the whole HYPE balance to the creator's wallet.
 import { createWalletClient, custom, getAddress, parseAbi } from "viem";
 import type { Address, EIP1193Provider, Hash } from "viem";
 
-import { robinhoodChain } from "@/lib/chain";
-import { chunkedLogs, launchedTokenAbi } from "@/lib/curve";
-import { LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
+import { CHAIN_NAME, zozaChain } from "@/lib/chain";
+import { launchedTokenAbi } from "@/lib/curve";
+import { LAUNCHPAD_LIVE, LAUNCH_FACTORY, NOT_DEPLOYED, launchFactoryAbi } from "@/lib/launchpad";
 import { ChainError, NO_RPC, ensureChain, readClient, simulateFunded, toChainError, withTimeout } from "@/lib/rpc";
 
 export const feeEscrowAbi = parseAbi([
@@ -48,10 +47,11 @@ export type CreatorToken = {
 };
 
 export async function feeEscrowAddress(client: Client): Promise<Address> {
+  if (!LAUNCHPAD_LIVE) throw new ChainError(NOT_DEPLOYED);
   return withTimeout(client.readContract({ address: LAUNCH_FACTORY, abi: factoryEscrowAbi, functionName: "feeEscrow" }), 30_000, NO_RPC);
 }
 
-/** ETH waiting in the escrow for `wallet`, ready to claim. */
+/** HYPE waiting in the escrow for `wallet`, ready to claim. */
 export async function claimableBalance(client: Client, escrow: Address, wallet: Address): Promise<bigint> {
   return withTimeout(client.readContract({ address: escrow, abi: feeEscrowAbi, functionName: "balanceOf", args: [wallet] }), 30_000, NO_RPC);
 }
@@ -88,23 +88,15 @@ export async function readCreatorToken(client: Client, token: Address): Promise<
   return { token, name, symbol, curve, recipient, graduated, pending, sweepable: !graduated && buyback === ZERO };
 }
 
-/**
- * Tokens launched from `wallet`, found from the factory's TokenLaunched events
- * by scanning back from the head (best effort: a bounded number of ranges).
- */
-export async function findLaunchesBy(client: Client, wallet: Address, head: bigint): Promise<Address[]> {
-  const event = launchFactoryAbi.find((x) => x.type === "event" && x.name === "TokenLaunched")!;
-  const span = BigInt(500_000);
-  const found: Address[] = [];
-  for (let to = head, i = 0; to > ZERO && i < 12; i++) {
-    const from = to > span ? to - span + BigInt(1) : ZERO;
-    const logs = await chunkedLogs(from, to, (f, t) =>
-      client.getLogs({ address: LAUNCH_FACTORY, event, args: { deployer: wallet }, fromBlock: f, toBlock: t }),
-    );
-    for (const l of logs) if (l.args.token) found.push(l.args.token);
-    to = from - BigInt(1);
-  }
-  return found;
+/** Tokens launched from `wallet`, oldest first, from the factory's registry. */
+export async function findLaunchesBy(client: Client, wallet: Address): Promise<Address[]> {
+  if (!LAUNCHPAD_LIVE) return [];
+  const list = await withTimeout(
+    client.readContract({ address: LAUNCH_FACTORY, abi: launchFactoryAbi, functionName: "tokensBy", args: [wallet] }),
+    30_000,
+    NO_RPC,
+  );
+  return [...list];
 }
 
 async function send(
@@ -116,10 +108,10 @@ async function send(
 ): Promise<Hash> {
   try {
     const account = getAddress(wallet.toLowerCase());
-    onStatus("switching wallet to Robinhood Chain");
+    onStatus(`switching wallet to ${CHAIN_NAME}`);
     await ensureChain(provider);
     const client = readClient(provider);
-    const walletClient = createWalletClient({ chain: robinhoodChain, transport: custom(provider), account });
+    const walletClient = createWalletClient({ chain: zozaChain, transport: custom(provider), account });
     onStatus(`checking the ${what}`);
     const { request } = await withTimeout(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -5,7 +5,7 @@ import { PageShell } from "@/components/site/page-shell";
 
 export const metadata: Metadata = {
   title: "Claim",
-  description: "Collect the creator fees your Zoza tokens earned on Robinhood Chain.",
+  description: "Collect the creator fees your Zoza tokens earned on Elysium.",
 };
 
 export default function Page() {

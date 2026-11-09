@@ -1,13 +1,12 @@
-// Trading against a Pons V2 bonding curve (PonsV2BondingCurve, verified
-// source: github.com/Minh3132/pons-labs, contractsV2/src/v2). Until a launch
-// graduates into its Uniswap V4 pool, every buy and sell settles against the
-// curve in native ETH, and each one emits CurveBuy / CurveSell — the trade
-// history behind the token page's candles and transaction list.
+// Trading against a Zoza bonding curve on Elysium (ZozaCurve in
+// contracts/ZozaLaunchpad.sol). Every buy and sell settles against the curve
+// in native HYPE, and each one emits CurveBuy / CurveSell — the trade history
+// behind the token page's candles and transaction list.
 import { createWalletClient, custom, formatEther, getAddress, parseAbi, zeroAddress } from "viem";
 import type { Address, EIP1193Provider, Hash } from "viem";
 
-import { robinhoodChain } from "@/lib/chain";
-import { LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
+import { CHAIN_NAME, zozaChain } from "@/lib/chain";
+import { LAUNCHPAD_LIVE, LAUNCH_FACTORY, launchFactoryAbi } from "@/lib/launchpad";
 import { ChainError, NO_RPC, ensureChain, isInsufficientFunds, notEnoughEth, readClient, simulateFunded, toChainError, withTimeout } from "@/lib/rpc";
 
 export const curveAbi = parseAbi([
@@ -65,10 +64,10 @@ export type CurveState = {
 export type Trade = {
   kind: "buy" | "sell";
   trader: Address;
-  /** ETH paid (buy) or gross ETH before fees (sell), in wei */
+  /** HYPE paid (buy) or gross HYPE before fees (sell), in wei */
   eth: bigint;
   tokens: bigint;
-  /** ETH per token */
+  /** HYPE per token */
   price: number;
   block: bigint;
   tx: Hash;
@@ -114,7 +113,7 @@ export async function fetchCurve(client: Client, curve: Address): Promise<CurveS
   return { quoteReserve, tokenReserve, realQuote, threshold, sellable, graduated, feeBps, taxBps };
 }
 
-/** Spot price in ETH per token. */
+/** Spot price in HYPE per token. */
 export const spotPrice = (s: CurveState) =>
   s.tokenReserve > ZERO ? Number(formatEther(s.quoteReserve)) / Number(formatEther(s.tokenReserve)) : 0;
 
@@ -126,7 +125,7 @@ export function quoteBuy(s: CurveState, ethIn: bigint): bigint {
   return out > s.sellable ? s.sellable : out;
 }
 
-/** ETH (wei) received for selling `tokensIn`, after fee and creator tax. */
+/** HYPE (wei) received for selling `tokensIn`, after fee and creator tax. */
 export function quoteSell(s: CurveState, tokensIn: bigint): bigint {
   if (tokensIn <= ZERO) return ZERO;
   const gross = (tokensIn * s.quoteReserve) / (s.tokenReserve + tokensIn);
@@ -198,33 +197,21 @@ export async function fetchTrades(client: Client, curve: Address, fromBlock: big
 const ethPerToken = (eth: bigint, tokens: bigint) =>
   tokens > ZERO ? Number(formatEther(eth)) / Number(formatEther(tokens)) : 0;
 
-/**
- * Block the token was launched in, found from the factory's TokenLaunched
- * event by scanning back from the head (used when a token page is opened
- * without a known launch block).
- */
-export async function findLaunchBlock(client: Client, token: Address, head: bigint): Promise<bigint | null> {
-  const event = launchFactoryAbi.find((x) => x.type === "event" && x.name === "TokenLaunched")!;
-  const span = BigInt(500_000);
-  for (let to = head, i = 0; to > BigInt(0) && i < 12; i++) {
-    const from = to > span ? to - span + BigInt(1) : BigInt(0);
-    const logs = await chunkedLogs(from, to, (f, t) =>
-      client.getLogs({ address: LAUNCH_FACTORY, event, args: { token }, fromBlock: f, toBlock: t }),
-    );
-    if (logs.length) return logs[0].blockNumber!;
-    to = from - BigInt(1);
-  }
-  return null;
+/** Block the token was launched in, from the factory's registry (null if unknown). */
+export async function findLaunchBlock(client: Client, token: Address): Promise<bigint | null> {
+  if (!LAUNCHPAD_LIVE) return null;
+  const block = await client.readContract({ address: LAUNCH_FACTORY, abi: launchFactoryAbi, functionName: "launchBlock", args: [token] });
+  return block > BigInt(0) ? block : null;
 }
 
 export type TradeResult = { hash: Hash };
 
-// a curve trade plus a possible auto-graduation; only used to price a simulation
+// a curve trade; generous, only used to price a simulation
 const TRADE_GAS_LIMIT = BigInt(3_000_000);
 
 /**
  * Buys with `ethIn` wei, or sells `tokensIn`, through the connected wallet:
- * switch to Robinhood Chain, approve the curve for a sell if needed, simulate,
+ * switch to Elysium, approve the curve for a sell if needed, simulate,
  * then send the trade for the user to confirm.
  */
 export async function trade(
@@ -237,10 +224,10 @@ export async function trade(
 ): Promise<TradeResult> {
   try {
     const account = getAddress(wallet.toLowerCase());
-    onStatus("switching wallet to Robinhood Chain");
+    onStatus(`switching wallet to ${CHAIN_NAME}`);
     await ensureChain(provider);
     const client = readClient(provider);
-    const walletClient = createWalletClient({ chain: robinhoodChain, transport: custom(provider), account });
+    const walletClient = createWalletClient({ chain: zozaChain, transport: custom(provider), account });
 
     if (order.kind === "sell") {
       const allowance = await client.readContract({ address: token, abi: launchedTokenAbi, functionName: "allowance", args: [account, curve] });
@@ -251,7 +238,7 @@ export async function trade(
           abi: launchedTokenAbi,
           functionName: "approve",
           args: [curve, order.tokensIn],
-          chain: robinhoodChain,
+          chain: zozaChain,
           account,
         });
         onStatus("waiting for the approval");

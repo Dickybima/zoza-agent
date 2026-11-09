@@ -11,7 +11,6 @@ import { fetchCurve, fetchTokenInfo, launchedTokenAbi, minOut, quoteBuy, quoteSe
 import type { CurveState, TokenInfo } from "@/lib/curve";
 import { fmtEth, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
 import { useAllLaunches } from "@/lib/launches";
-import { OFFICIAL_ADDRESS } from "@/lib/official";
 import { readClient } from "@/lib/rpc";
 import type { ChainError } from "@/lib/rpc";
 import { EXAMPLES, parseCommand } from "@/lib/terminal";
@@ -34,12 +33,12 @@ const BANNER = [
   "█████   ███   █████  █   █",
 ];
 const HELP: [string, string][] = [
-  ["swap 0.01 eth to zoza", "buy a token with ETH"],
-  ["buy zoza with 0.01 eth", "same thing, said differently"],
-  ["swap 1m zoza to eth", "sell an amount (k / m / b work)"],
-  ["sell 50% zoza  ·  sell all zoza", "sell part or all of your bag"],
-  ["price zoza", "price, market cap, curve progress"],
-  ["balance  ·  balance zoza", "your ETH and token balances"],
+  ["swap 1 hype to test", "buy a token with HYPE"],
+  ["buy test with 1 hype", "same thing, said differently"],
+  ["swap 1m test to hype", "sell an amount (k / m / b work)"],
+  ["sell 50% test  ·  sell all test", "sell part or all of your bag"],
+  ["price test", "price, market cap, curve progress"],
+  ["balance  ·  balance test", "your HYPE and token balances"],
   ["tokens", "every token you can trade here"],
   ["connect  ·  clear", "connect a wallet  ·  wipe the screen"],
 ];
@@ -54,8 +53,8 @@ export function Terminal() {
   const [lines, setLines] = useState<Line[]>(() => [
     ...BANNER.map((t) => line("art", t)),
     line("dim", ""),
-    line("out", "Zoza terminal. Swap any Zoza token on Robinhood Chain by just saying it."),
-    line("dim", "Try: swap 0.01 eth to zoza  ·  sell 50% zoza  ·  help"),
+    line("out", "Zoza terminal. Swap any Zoza token on Elysium by just saying it."),
+    line("dim", "Try: swap 1 hype to test  ·  sell 50% test  ·  help"),
     line("dim", ""),
   ]);
   const [input, setInput] = useState("");
@@ -73,10 +72,9 @@ export function Terminal() {
   const print = (...ls: Line[]) => setLines((prev) => [...prev, ...ls]);
   const usd = (eth: number) => (ethUsd ? fmtUsd(eth * ethUsd) : null);
 
-  /** A ticker, name or address → a Zoza token (the official $ZOZA wins ties). */
+  /** A ticker, name or address → a Zoza token (the newest launch wins ties). */
   const resolve = (q: string): Address | null => {
     if (isAddress(q)) return getAddress(q);
-    if (q === "zoza") return OFFICIAL_ADDRESS;
     const matches = tokens.filter((t) => t.ticker.toLowerCase() === q || t.name.toLowerCase() === q);
     return matches.length ? getAddress(matches[0].address) : null;
   };
@@ -98,14 +96,15 @@ export function Terminal() {
   };
 
   const graduatedNote = (t: TokenInfo) =>
-    line("err", `$${t.symbol} has graduated to its Uniswap v4 pool, so it no longer trades on the curve here. Open /token?address=${t.address} for the pool.`);
+    line("err", `$${t.symbol} has left its bonding curve, so it no longer trades here.`);
 
   const priceLines = (t: TokenInfo, c: CurveState) => {
     const p = spotPrice(c);
-    const pct = Math.min(100, (Number(formatEther(c.realQuote)) / Number(formatEther(c.threshold || BigInt(1)))) * 100);
+    // share of the supply bought out of the curve
+    const pct = t.totalSupply > ZERO ? Math.min(100, Math.max(0, (1 - Number(formatEther(c.tokenReserve)) / Number(formatEther(t.totalSupply))) * 100)) : 0;
     return [
       line("hl", `${t.name} ($${t.symbol})  ·  ${shortAddr(t.address)}`),
-      line("out", `  price      ${ethUsd ? fmtUsdPrice(p * ethUsd) : `${p.toExponential(3)} ETH`}`),
+      line("out", `  price      ${ethUsd ? fmtUsdPrice(p * ethUsd) : `${p.toExponential(3)} HYPE`}`),
       line("out", `  mcap       ${usd(p * Number(formatUnits(t.totalSupply, 18))) ?? "—"}`),
       line("out", `  curve      ${"█".repeat(Math.round(pct / 5)).padEnd(20, "░")} ${pct.toFixed(1)}%${c.graduated ? "  (graduated)" : ""}`),
     ];
@@ -125,7 +124,7 @@ export function Terminal() {
         return;
       }
       case "tokens": {
-        const list = [{ ticker: "ZOZA", name: "Zoza (official)", address: OFFICIAL_ADDRESS as string }, ...tokens.filter((t) => t.address.toLowerCase() !== OFFICIAL_ADDRESS.toLowerCase())];
+        const list = tokens;
         print(line("hl", `${list.length} token${list.length === 1 ? "" : "s"}`), ...list.slice(0, 30).map((t) => line("out", `  $${t.ticker.padEnd(12)} ${t.name.slice(0, 28).padEnd(30)} ${shortAddr(t.address)}`)));
         if (list.length > 30) print(line("dim", `  …and ${list.length - 30} more in Explore`));
         return;
@@ -140,7 +139,7 @@ export function Terminal() {
         const { wallet } = await needWallet();
         const client = readClient();
         const eth = await client.getBalance({ address: wallet });
-        print(line("hl", `wallet ${shortAddr(wallet)}`), line("out", `  ETH        ${fmtEth(eth)}${usd(Number(formatEther(eth))) ? `  (${usd(Number(formatEther(eth)))})` : ""}`));
+        print(line("hl", `wallet ${shortAddr(wallet)}`), line("out", `  HYPE       ${fmtEth(eth)}${usd(Number(formatEther(eth))) ? `  (${usd(Number(formatEther(eth)))})` : ""}`));
         if (cmd.token) {
           const { token } = await load(cmd.token);
           const bal = await client.readContract({ address: token.address, abi: launchedTokenAbi, functionName: "balanceOf", args: [wallet] });
@@ -150,16 +149,16 @@ export function Terminal() {
       }
       case "buy": {
         const ethIn = parseEther(cmd.eth);
-        if (ethIn <= ZERO) throw new Error("Spend more than 0 ETH.");
+        if (ethIn <= ZERO) throw new Error("Spend more than 0 HYPE.");
         print(line("dim", "› quoting…"));
         const { token, curve } = await load(cmd.token);
         if (curve.graduated) return print(graduatedNote(token));
         const out = quoteBuy(curve, ethIn);
         if (out <= ZERO) throw new Error("The curve can’t fill that buy right now.");
-        const summary = `swap ${fmtEth(ethIn)} ETH → ~${fmtTokens(out)} $${token.symbol}`;
+        const summary = `swap ${fmtEth(ethIn)} HYPE → ~${fmtTokens(out)} $${token.symbol}`;
         print(
           line("hl", summary),
-          line("out", `  you pay       ${fmtEth(ethIn)} ETH${usd(Number(cmd.eth)) ? `  (${usd(Number(cmd.eth))})` : ""}`),
+          line("out", `  you pay       ${fmtEth(ethIn)} HYPE${usd(Number(cmd.eth)) ? `  (${usd(Number(cmd.eth))})` : ""}`),
           line("out", `  you receive   ~${fmtTokens(out)} $${token.symbol}`),
           line("out", `  min received  ${fmtTokens(minOut(out, SLIPPAGE_BPS))} (5% slippage)`),
           line("out", `  fees          ${Number(curve.feeBps + curve.taxBps) / 100}% (incl. ${Number(curve.taxBps) / 100}% to the creator)`),
@@ -179,12 +178,12 @@ export function Terminal() {
         if (amount <= ZERO) throw new Error("Sell more than 0.");
         if (amount > bal) throw new Error(`You only hold ${fmtTokens(bal)} $${token.symbol}.`);
         const out = quoteSell(curve, amount);
-        const summary = `swap ${fmtTokens(amount)} $${token.symbol} → ~${fmtEth(out)} ETH`;
+        const summary = `swap ${fmtTokens(amount)} $${token.symbol} → ~${fmtEth(out)} HYPE`;
         print(
           line("hl", summary),
           line("out", `  you sell      ${fmtTokens(amount)} $${token.symbol} (of ${fmtTokens(bal)})`),
-          line("out", `  you receive   ~${fmtEth(out)} ETH${usd(Number(formatEther(out))) ? `  (${usd(Number(formatEther(out)))})` : ""}`),
-          line("out", `  min received  ${fmtEth(minOut(out, SLIPPAGE_BPS))} ETH (5% slippage)`),
+          line("out", `  you receive   ~${fmtEth(out)} HYPE${usd(Number(formatEther(out))) ? `  (${usd(Number(formatEther(out)))})` : ""}`),
+          line("out", `  min received  ${fmtEth(minOut(out, SLIPPAGE_BPS))} HYPE (5% slippage)`),
           line("dim", "  selling may ask for one approval first"),
           line("ok", "confirm swap? [y/N]"),
         );
@@ -247,7 +246,7 @@ export function Terminal() {
     }
   };
 
-  const prompt = pending ? "confirm? [y/N]" : `${address ? shortAddr(address) : "guest"}@robinhood:~$`;
+  const prompt = pending ? "confirm? [y/N]" : `${address ? shortAddr(address) : "guest"}@elysium:~$`;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 md:py-14">
@@ -315,7 +314,7 @@ export function Terminal() {
             autoCapitalize="off"
             spellCheck={false}
             aria-label="Terminal command"
-            placeholder={busy ? "working…" : pending ? "y to swap, anything else cancels" : "swap 0.01 eth to zoza"}
+            placeholder={busy ? "working…" : pending ? "y to swap, anything else cancels" : "swap 1 hype to test"}
             className="min-w-0 flex-1 bg-transparent text-foreground caret-signal outline-none placeholder:text-muted-foreground/50"
           />
         </div>

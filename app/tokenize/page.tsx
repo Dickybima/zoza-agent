@@ -5,7 +5,7 @@ import { Tokenize } from "@/components/site/tokenize";
 
 export const metadata: Metadata = {
   title: "Tokenize",
-  description: "Turn a fomo or pump.fun profile into a token on Robinhood Chain.",
+  description: "Turn a fomo or pump.fun profile into a token on Elysium.",
 };
 
 export default function Page() {

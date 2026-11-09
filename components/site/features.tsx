@@ -18,7 +18,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ZapIcon,
     title: "Speed without compromise",
-    body: "From confirmation to finality in seconds. Robinhood Chain keeps every launch efficient, lightweight, and instant.",
+    body: "From confirmation to finality in seconds. Elysium keeps every launch efficient, lightweight, and instant.",
   },
   {
     icon: WalletIcon,
