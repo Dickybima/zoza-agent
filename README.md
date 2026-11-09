@@ -20,7 +20,7 @@ npm run lint
 ```
 app/                 layout (header, footer, fonts, theme script, wallet provider), globals.css, icon.svg
 app/page.tsx         home: ASCII tunnel hero, stats, page index, CTA
-app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, claim, terminal, portfolio, bridge
+app/<menu>/page.tsx  one route per menu: features, how-it-works, agent, explore, network, tokenize, terminal, portfolio, bridge
 lib/montra.ts        Montra: launch, pools, quotes, trades, creator fees, public API (ABIs in lib/montra-abi.ts)
 components/ui/       shadcn-style primitives, hero-ascii-tunnel.tsx (home hero), ai-thiking-orb-and-input.tsx (agent chat; its mo-* styles live in app/globals.css)
 components/site/     page sections (header, hero, agent console, explore, …)
@@ -76,10 +76,6 @@ Uploads need a Blob store connected to the Vercel project: Storage → Create �
 ### Terminal
 
 `/terminal` swaps Montra tokens from plain-English commands (`lib/terminal.ts` parses them): `swap 1 hype to meow`, `buy meow with 1 hype`, `swap 1m meow to hype`, `sell 50% meow`, `sell all meow`, plus `price`, `balance`, `tokens`, `connect`, `help` and `clear`. Tokens are matched by ticker or name against Zoza's launch list, or by any Montra token's address. Every swap is quoted exactly by Montra's router first (`quoteExactIn`), needs a `y` to go ahead, and runs through `swapExactIn` (approve-then-sell for sells, 5% slippage).
-
-### Claiming creator fees
-
-`/claim` (`lib/fees.ts`) lists the pools whose creator fees pay the connected wallet (Montra's API `/api/wallets/{wallet}/lanes`, this browser's launches, or added by address), with what each would pay now (`LaunchLens.creatorClaimable`). **Claim** calls `claim(poolId, wallet)` on the pool's hook, which only the pool's recipient can do, and pays the wallet in HYPE.
 
 ### Token pages and trading
 

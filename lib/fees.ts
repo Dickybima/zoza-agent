@@ -3,9 +3,9 @@
 // recipient (the launching wallet, for Zoza launches) claims it with
 // `claim(poolId, to)` on the hook. LaunchLens.creatorClaimable says what a
 // claim would pay right now (montramarkets.xyz/docs/reference).
-import type { Address, EIP1193Provider, Hash, Hex } from "viem";
+import type { Address, Hex } from "viem";
 
-import { claimCreatorFees, creatorClaimable, fetchPool, montraApi } from "@/lib/montra";
+import { creatorClaimable, fetchPool } from "@/lib/montra";
 import { montraTokenAbi } from "@/lib/montra-abi";
 import { NO_RPC, readClient, withTimeout } from "@/lib/rpc";
 
@@ -35,13 +35,3 @@ export async function readCreatorToken(client: Client, token: Address): Promise<
   const claimable = await creatorClaimable(client, pool);
   return { token, name, symbol, hook: pool.hook, poolId: pool.poolId, recipient: pool.recipient, claimable };
 }
-
-/** Tokens whose creator fees pay `wallet`, from Montra's indexer. */
-export async function findLaunchesBy(wallet: Address): Promise<{ token: Address; logo?: string }[]> {
-  const res = (await montraApi.lanes(wallet)) as { tokens?: { address: string; imageUrl: string | null }[] };
-  return (res.tokens ?? []).map((t) => ({ token: t.address as Address, logo: t.imageUrl ?? undefined }));
-}
-
-/** Claims one pool's creator fees to the connected wallet. */
-export const claimFees = (provider: EIP1193Provider, wallet: string, t: CreatorToken, onStatus: (s: string) => void): Promise<Hash> =>
-  claimCreatorFees(provider, wallet, t, onStatus);

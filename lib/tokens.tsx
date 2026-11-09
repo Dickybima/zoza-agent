@@ -9,10 +9,10 @@ import { zozaChain } from "@/lib/chain";
 // lives in this browser's localStorage (with an in-memory fallback); a feed
 // shared by every visitor comes from Montra's indexer (see lib/launches.ts). Bumping the version starts every browser with an empty
 // list (v1: simulated launches, v2–v3: lists cleared on request, v4: Robinhood
-// Chain launches). From v5 the list is kept per chain, so testnet and mainnet
-// launches never mix.
-const STORE_KEY = `zoza.tokens.v5.${zozaChain.id}`;
-const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2", "zoza.tokens.v3", "zoza.tokens.v4"];
+// Chain launches, v5: test launches cleared on request). From v5 the list is
+// kept per chain, so testnet and mainnet launches never mix.
+const STORE_KEY = `zoza.tokens.v6.${zozaChain.id}`;
+const OLD_KEYS = ["zoza.tokens.v1", "zoza.tokens.v2", "zoza.tokens.v3", "zoza.tokens.v4", "zoza.tokens.v5.99801", "zoza.tokens.v5.99901"];
 const EMPTY: LaunchedToken[] = [];
 
 // drop earlier lists so they don't linger in storage

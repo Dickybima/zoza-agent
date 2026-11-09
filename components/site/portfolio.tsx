@@ -73,7 +73,7 @@ export function Portfolio() {
         <Stat
           label="claimable fees"
           value={data ? `${fmtEth(data.claimable)} HYPE` : null}
-          sub={data ? (data.claimable > BigInt(0) ? <Link href="/claim" className="text-signal hover:underline">claim now →</Link> : `${data.launched} token${data.launched === 1 ? "" : "s"} launched`) : null}
+          sub={data ? (data.claimable > BigInt(0) ? <a href="https://montramarkets.xyz/portfolio" target="_blank" rel="noopener noreferrer" className="text-signal hover:underline">claim on Montra ↗</a> : `${data.launched} token${data.launched === 1 ? "" : "s"} launched`) : null}
         />
       </div>
 

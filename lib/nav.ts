@@ -8,10 +8,9 @@ export const PAGES: NavPage[] = [
   { href: "/explore", label: "Explore", index: "04", blurb: "Every token born through Zoza." },
   { href: "/network", label: "Network", index: "05", blurb: "Built natively on Elysium." },
   { href: "/tokenize", label: "Tokenize", index: "06", blurb: "Turn a fomo or pump.fun profile into a token." },
-  { href: "/claim", label: "Claim", index: "07", blurb: "Collect the creator fees your tokens earned." },
-  { href: "/terminal", label: "Terminal", index: "08", blurb: "Swap any Zoza token by just saying it." },
-  { href: "/portfolio", label: "Portfolio", index: "09", blurb: "Everything your wallet holds across Zoza." },
-  { href: "/bridge", label: "Bridge", index: "10", blurb: "Move HYPE between HyperEVM and Elysium." },
+  { href: "/terminal", label: "Terminal", index: "07", blurb: "Swap any Zoza token by just saying it." },
+  { href: "/portfolio", label: "Portfolio", index: "08", blurb: "Everything your wallet holds across Zoza." },
+  { href: "/bridge", label: "Bridge", index: "09", blurb: "Move HYPE between HyperEVM and Elysium." },
 ];
 
 /** true when `pathname` is `href` or below it (trailing slash tolerant) */
