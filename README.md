@@ -79,3 +79,19 @@ The home page ranks $ZOZA holders (`components/site/holder-board.tsx`). `api/hol
 `/token?address=0x…` reads everything from chain (`lib/curve.ts`): name, symbol, logo, description and socials from the token's `getTokenInfo()`, the bonding curve's reserves, fees and graduation progress, and its `CurveBuy` / `CurveSell` events, which drive the price line chart (lightweight-charts, 1m–1h buckets) and the transactions table. It refreshes every 8 s. Prices, market cap, liquidity and trade values are shown in USD using the ETH/USD rate from `api/eth-price.js` (Coinbase, falling back to CoinGecko and Kraken, edge-cached for 60 s); historical points use the current rate. The trade panel buys with ETH (`buy`) or sells (`approve` then `sell`) against the curve with a slippage bound; graduated tokens show a notice instead. Any token address can be opened from the Explore search box.
 
 The Explore feed lists every token launched through Zoza, on any device: `api/launches.mjs` scans the factory's `TokenLaunched` events (the last ~40M blocks, shrinking the range when the RPC rejects it), keeps the tokens whose on-chain description says "Launched with Zoza" (Zoza writes that into every launch), and is edge-cached for 60 s. The browser's own launches (localStorage) are merged in so a new token appears immediately.
+
+## Bridge (HyperEVM ↔ Elysium)
+
+`/bridge` moves native HYPE between HyperEVM and Elysium (Kinetiq's Arbitrum Orbit L2) through the rollup's canonical bridge, using `@arbitrum/sdk` (`lib/elysium.ts`, `components/site/bridge.tsx`):
+
+- **Deposit** (HyperEVM → Elysium): `Inbox.depositEth`, lands in about a minute.
+- **Withdraw** (Elysium → HyperEVM): `ArbSys.withdrawEth`, then **Claim** through `Outbox.executeTransaction` once the challenge period has passed (about a week on mainnet). Transfers are remembered in the browser; "find withdrawals" recovers them from Elysium logs.
+
+Testnet (HyperEVM Testnet 998 ↔ Elysium Testnet 99801) works out of the box. Mainnet switches on when these are set (e.g. in Vercel) and the site is redeployed:
+
+| Variable | Value |
+| --- | --- |
+| `NEXT_PUBLIC_ELYSIUM_MAINNET_RPC` | Elysium mainnet RPC URL (chain 99901) |
+| `NEXT_PUBLIC_ELYSIUM_MAINNET_ROLLUP` | Elysium rollup contract address on HyperEVM |
+
+Both chain IDs and the rollup's parent chain are checked at runtime before any transaction is offered.

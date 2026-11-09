@@ -11,6 +11,7 @@ export const PAGES: NavPage[] = [
   { href: "/claim", label: "Claim", index: "07", blurb: "Collect the creator fees your tokens earned." },
   { href: "/terminal", label: "Terminal", index: "08", blurb: "Swap any Zoza token by just saying it." },
   { href: "/portfolio", label: "Portfolio", index: "09", blurb: "Everything your wallet holds across Zoza." },
+  { href: "/bridge", label: "Bridge", index: "10", blurb: "Move HYPE between HyperEVM and Elysium." },
 ];
 
 /** true when `pathname` is `href` or below it (trailing slash tolerant) */
