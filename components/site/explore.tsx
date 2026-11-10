@@ -8,6 +8,8 @@ import { isAddress } from "viem";
 import { CREATOR_FEE, TAX, shortAddr, timeAgo } from "@/lib/agent";
 import type { LaunchedToken } from "@/lib/agent";
 import { montraToken } from "@/lib/montra";
+import { OFFICIAL_ADDRESS, useOfficialToken } from "@/lib/official";
+import type { OfficialToken } from "@/lib/official";
 import { PLATFORMS } from "@/lib/profile";
 import { useAllLaunches } from "@/lib/launches";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +26,9 @@ type Sort = "new" | "old" | "az";
 
 export function Explore() {
   const { tokens: all, fresh, status } = useAllLaunches();
-  const tokens = all;
+  const official = useOfficialToken();
+  // the official token is pinned above the list, so it isn't repeated in it
+  const tokens = useMemo(() => all.filter((t) => t.address.toLowerCase() !== OFFICIAL_ADDRESS.toLowerCase()), [all]);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>("new");
   const [, setTick] = useState(0);
@@ -45,6 +49,7 @@ export function Explore() {
     );
   }, [tokens, q, sort]);
   const query = q.trim().toLowerCase();
+  const showOfficial = !query || [official.name, official.ticker, official.address, "zoza"].some((v) => v.toLowerCase().includes(query));
 
   return (
     <Section id="explore">
@@ -88,11 +93,24 @@ export function Explore() {
         </Link>
       ) : null}
 
+      {showOfficial ? (
+        <div className="mb-10">
+          <p className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            <span className="text-signal">●</span> official token
+          </p>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <TokenCard t={official} official={official} />
+          </div>
+        </div>
+      ) : null}
+
       {tokens.length === 0 ? (
         query ? (
-          <EmptyState>
-            <p>No tokens match “{q}”.</p>
-          </EmptyState>
+          showOfficial ? null : (
+            <EmptyState>
+              <p>No tokens match “{q}”.</p>
+            </EmptyState>
+          )
         ) : (
           <EmptyState>
             <p>No community launches yet. The first token launched through Zoza will appear here.</p>
@@ -104,9 +122,11 @@ export function Explore() {
           </EmptyState>
         )
       ) : list.length === 0 ? (
-        <EmptyState>
-          <p>No tokens match “{q}”.</p>
-        </EmptyState>
+        showOfficial ? null : (
+          <EmptyState>
+            <p>No tokens match “{q}”.</p>
+          </EmptyState>
+        )
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((t) => (
@@ -135,7 +155,7 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TokenCard({ t, fresh = false }: { t: LaunchedToken; fresh?: boolean }) {
+function TokenCard({ t, fresh = false, official }: { t: LaunchedToken; fresh?: boolean; official?: OfficialToken }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -146,9 +166,9 @@ function TokenCard({ t, fresh = false }: { t: LaunchedToken; fresh?: boolean }) 
   };
 
   return (
-    <Card className={fresh ? "border-signal/60 animate-in fade-in-0 zoom-in-95 duration-500" : undefined}>
+    <Card className={fresh ? "border-signal/60 animate-in fade-in-0 zoom-in-95 duration-500" : official ? "border-signal/50" : undefined}>
       <Link href={tokenHref(t)} className="flex items-start gap-3 hover:text-signal">
-        <TokenAvatar src={t.logo} label={t.ticker} seed={t.address} className="size-14" />
+        <TokenAvatar src={t.logo} label={t.ticker} seed={t.address} fallback={official ? "/icon.svg" : undefined} className="size-14" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{t.name}</p>
           <p className="text-xs text-muted-foreground">
@@ -161,15 +181,24 @@ function TokenCard({ t, fresh = false }: { t: LaunchedToken; fresh?: boolean }) 
             ) : null}
           </p>
         </div>
-        {fresh ? <Badge variant="signal">New</Badge> : null}
+        {official ? <Badge variant="signal">Official</Badge> : fresh ? <Badge variant="signal">New</Badge> : null}
       </Link>
       <dl className="space-y-1.5 text-xs">
-        {[
-          ["contract", shortAddr(t.address)],
-          ["creator", shortAddr(t.creator)],
-          ["fee", `${TAX}% · ${CREATOR_FEE}% creator`],
-          ["launched", t.createdAt ? timeAgo(t.createdAt) : "—"],
-        ].map(([k, v]) => (
+        {(official
+          ? [
+              ["contract", shortAddr(t.address)],
+              ["mcap", official.marketCap !== null ? `${official.marketCap.toLocaleString("en-US", { maximumFractionDigits: 2 })} HYPE` : "…"],
+              ["holders", official.holders !== null ? official.holders.toLocaleString("en-US") : "…"],
+              ["fee", official.feePct !== null ? `${official.feePct}% per trade` : "…"],
+              ["network", "Elysium · Montra"],
+            ]
+          : [
+              ["contract", shortAddr(t.address)],
+              ["creator", shortAddr(t.creator)],
+              ["fee", `${TAX}% · ${CREATOR_FEE}% creator`],
+              ["launched", t.createdAt ? timeAgo(t.createdAt) : "—"],
+            ]
+        ).map(([k, v]) => (
           <div key={k} className="flex items-baseline gap-2">
             <dt className="text-muted-foreground">{k}</dt>
             <span aria-hidden className="flex-1 translate-y-[-3px] border-b border-dotted border-border" />

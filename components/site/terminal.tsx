@@ -12,6 +12,7 @@ import type { PoolState, TokenInfo } from "@/lib/montra";
 import { montraTokenAbi } from "@/lib/montra-abi";
 import { fmtEth, fmtTokens, fmtUsd, fmtUsdPrice } from "@/lib/format";
 import { useAllLaunches } from "@/lib/launches";
+import { OFFICIAL_ADDRESS } from "@/lib/official";
 import { readClient } from "@/lib/rpc";
 import type { ChainError } from "@/lib/rpc";
 import { EXAMPLES, parseCommand } from "@/lib/terminal";
@@ -76,6 +77,7 @@ export function Terminal() {
   /** A ticker, name or address → a Zoza token (the newest launch wins ties). */
   const resolve = (q: string): Address | null => {
     if (isAddress(q)) return getAddress(q);
+    if (q === "zoza" || q === "z0za") return getAddress(OFFICIAL_ADDRESS);
     const matches = tokens.filter((t) => t.ticker.toLowerCase() === q || t.name.toLowerCase() === q);
     return matches.length ? getAddress(matches[0].address) : null;
   };
@@ -123,7 +125,10 @@ export function Terminal() {
         return;
       }
       case "tokens": {
-        const list = tokens;
+        const list = [
+          { ticker: "Z0ZA", name: "Zoza (official)", address: OFFICIAL_ADDRESS as string },
+          ...tokens.filter((t) => t.address.toLowerCase() !== OFFICIAL_ADDRESS.toLowerCase()),
+        ];
         print(line("hl", `${list.length} token${list.length === 1 ? "" : "s"}`), ...list.slice(0, 30).map((t) => line("out", `  $${t.ticker.padEnd(12)} ${t.name.slice(0, 28).padEnd(30)} ${shortAddr(t.address)}`)));
         if (list.length > 30) print(line("dim", `  …and ${list.length - 30} more in Explore`));
         return;
